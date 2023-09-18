@@ -4,9 +4,10 @@ import numpy as np
 import random
 
 dataset_config = {
-    'path': 'D:/Datasets/TEM-ImageNet-v1.3-master/image/',
+    'path': 'G:/Datasets/TEM-ImageNet-v1.3-master/image/',
     'train_split': 0.8,
-    'batchsize': 32,
+    'num_workers': 1,
+    'batchsize': 4,
     'shuffle': True,
 }
 
@@ -22,22 +23,25 @@ multiscale_aug_config = {
 training_config = {
     'task_name': 'Test1',
     'seed': 50,
-    'epoch': 200,
+    'epochs': 200,
     'start_epoch': 0,
     'criterion': nn.CrossEntropyLoss(reduction='mean'),
     'optim_config': {
         'name': torch.optim.Adam,
-        'lr': 1e-3,
+        'lr': 5e-4,
         'weight_decay': 0.001,
     },
-    'scheduler_warmup_config': {
+    'scheduler_config': {
         'multiplier': 1,
-        'total_epoch': 30,
-    },
-    'scheduler_down_config': {
-        'total_epoch': 400,
+        'warmup_epoch': 15,
+        'down_epoch': 100,
         'eta_min': 1e-2,
     },
+    'validate_step': 1,
+    'save': {
+        'enable': True,
+        'step': 1,
+    }
 
 }
 

@@ -9,7 +9,7 @@ from torch.utils.data import random_split
 import h5py
 import random
 import numpy as np
-import multiscale_aug
+import dataset.multiscale_aug as multiscale_aug
 import configs
 from tqdm import tqdm
 
@@ -22,7 +22,7 @@ class TEMImageNet_Aug(Dataset):
 
 
         for filename in os.listdir(path):
-            image = Image.open(os.path.join(path, filename)).resize(aug['orig_size'], Image.LANCZOS).convert('L')
+            image = Image.open(os.path.join(path, filename)).resize(aug['orig_size'], Image.Resampling.LANCZOS).convert('L')
             orig_images.append(image)
 
         if aug['method']:
@@ -69,13 +69,15 @@ class TEMImageNet(Dataset):
         self.lrs = []
         self.filenames = []
         for filename in tqdm(os.listdir(path)):
-            image = Image.open(os.path.join(path, filename)).resize(aug['orig_size'], Image.LANCZOS).convert('L')
+            image = Image.open(os.path.join(path, filename)).resize(aug['orig_size'], Image.Resampling.LANCZOS).convert('L')
             image = np.array(image)
+            image = image[np.newaxis, ...]
             self.lrs.append(image)
             self.filenames.append(filename)
         for filename in tqdm(os.listdir(hr_path)):
             image = Image.open(os.path.join(hr_path, filename)).convert('L')
             image = np.array(image)
+            image = image[np.newaxis, ...]
             self.hrs.append(image)
 
     def __len__(self):
@@ -91,11 +93,11 @@ def get_temimagenet_trainval():
                           aug=configs.multiscale_aug_config)
     train_split = configs.dataset_config['train_split']
     train_dataset, val_dataset = random_split(dataset, [train_split, 1 - train_split])
-    print('trainlength =', len(train_dataset), 'val length =', len(val_dataset))
+    print('train_length =', len(train_dataset), 'val_length =', len(val_dataset))
     train = DataLoader(train_dataset, batch_size=configs.dataset_config['batchsize'],
-                       shuffle=configs.dataset_config['shuffle'])
+                       shuffle=configs.dataset_config['shuffle'], num_workers=configs.dataset_config['num_workers'])
     val = DataLoader(val_dataset, batch_size=configs.dataset_config['batchsize'],
-                     shuffle=configs.dataset_config['shuffle'])
+                     shuffle=configs.dataset_config['shuffle'], num_workers=configs.dataset_config['num_workers'])
     return train, val
 
 
