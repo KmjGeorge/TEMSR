@@ -852,17 +852,25 @@ class SwinIR(nn.Module):
         return flops
 
 
+def get_swinir():
+    from configs import swinir_config
+    model = SwinIR(**swinir_config)
+    return model
+
+
 if __name__ == '__main__':
     upscale = 4
     window_size = 8
-    height = 256
-    width = 256
-    model = SwinIR(upscale=2, img_size=(height, width), in_chans=1,
-                   window_size=window_size, img_range=1., depths=[6, 6, 6, 6],
-                   embed_dim=60, num_heads=[6, 6, 6, 6], mlp_ratio=2, upsampler='denoising').cuda()
-    summary(model, input_size=(1, height, width))
+    # height = (1024 // upscale // window_size + 1) * window_size
+    # width = (720 // upscale // window_size + 1) * window_size
+    model = SwinIR(upscale=1, img_size=(256, 256), patch_size=1,
+                   window_size=window_size, img_range=1., depths=[3, 3, 3, 3],
+                   embed_dim=60, num_heads=[3, 3, 3, 3], mlp_ratio=2, upsampler='denoising').cuda()
     print(model)
+    # print(height, width, model.flops() / 1e9)
+    from torchsummary import summary
 
-    x = torch.randn((1, 1, height, width)).cuda()
-    x = model(x)
-    print(x.shape)
+    summary(model, (1, 256, 256))
+    # x = torch.randn((1, 3, height, width))
+    # x = model(x)
+    # print(x.shape)

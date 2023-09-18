@@ -1,14 +1,17 @@
+import pytorch_ssim
 import torch.cuda
 from torch.optim.lr_scheduler import CosineAnnealingLR
-from util.scheduler import GradualWarmupScheduler
+
+import configs
+from utils.scheduler import GradualWarmupScheduler
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.cuda.amp import autocast, GradScaler
 import pandas as pd
 from tqdm import tqdm
-from util.metrics import cal_psnr, cal_ssim, PerceptualLoss
+from utils.metrics import cal_psnr, cal_ssim, PerceptualLoss
 import torch.nn.functional as F
 
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
+device = configs.device
 
 
 class TrainingLog:
@@ -54,20 +57,22 @@ def sr_train(model, train_dataloader, val_dataloader, training_config):
     log = TrainingLog()
     optim_config = training_config['optim_config']
     scheduler_config = training_config['scheduler_config']
-    optimizer = optim_config['name'](model.parameters(), lr=optim_config['lr'],
-                                     weight_decay=optim_config['weight_decay'])
+    optimizer = torch.optim.Adam(model.parameters(), lr=optim_config['lr'],
+                                 weight_decay=optim_config['weight_decay'])
     scheduler_cos = CosineAnnealingLR(optimizer,
                                       T_max=training_config['epochs'] - scheduler_config['down_epoch'],
                                       eta_min=scheduler_config['eta_min'])
     scheduler = GradualWarmupScheduler(optimizer, multiplier=scheduler_config['multiplier'],
                                        total_epoch=scheduler_config['warmup_epoch'],
                                        after_scheduler=scheduler_cos)
+    scheduler.step()
     scaler = GradScaler()
     for epoch in range(training_config['epochs']):
-        epoch_loss, epoch_psnr, epoch_ssim = train_epoch(model, train_dataloader, optimizer, scaler, epoch)
+        epoch_loss, epoch_psnr, epoch_ssim = train_epoch(model, train_dataloader, optimizer, scaler, epoch, pytorch_ssim.SSIM())
         if epoch % training_config['validate_step'] == 0:
             val_loss, val_psnr, val_ssim = validate_epoch(model, val_dataloader)
-            log.update(epoch_loss, epoch_psnr, epoch_ssim, val_loss, val_psnr, val_ssim, optimizer.param_groups[0]['lr'])
+            log.update(epoch_loss, epoch_psnr, epoch_ssim, val_loss, val_psnr, val_ssim,
+                       optimizer.param_groups[0]['lr'])
         else:
             log.update(epoch_loss, epoch_psnr, epoch_ssim, -1, -1, -1,
                        optimizer.param_groups[0]['lr'])
@@ -79,7 +84,7 @@ def sr_train(model, train_dataloader, val_dataloader, training_config):
         scheduler.step()
 
 
-def train_epoch(model, train_dataloader, optimizer, scaler, epoch):
+def train_epoch(model, train_dataloader, optimizer, scaler, epoch, loss_fn):
     model.train()
     loop = tqdm(train_dataloader)
     loss_meter = AverageMeter()
@@ -87,32 +92,37 @@ def train_epoch(model, train_dataloader, optimizer, scaler, epoch):
     ssim_meter = AverageMeter()
 
     for lr, hr, _ in loop:
-        lr = lr.float().to(device)
-        hr = hr.float().to(device)
+        lr = (lr.float() / 255.0).to(device)
+        hr = (hr.float() / 255.0).to(device)
 
-        print(lr.shape, hr.shape)
         optimizer.zero_grad()
 
         with autocast():
             output = model(lr).to(device)
-            l1_loss = 5 * F.smooth_l1_loss(output, hr)
-            ssim_loss = 0.002 * (1 - cal_ssim(output, hr))
-            perception_fn = PerceptualLoss(blocks=[5, ], weights=[1, ], device=device)
-            perception_loss = 0.001 * perception_fn(output, hr)
-            loss = l1_loss + ssim_loss + perception_loss
+            l1_loss = F.smooth_l1_loss(output, hr)
+            ssim_loss = 0.1 * (1-cal_ssim(output, hr))
+            # perception_fn = PerceptualLoss(blocks=[4, ], weights=[1, ], device=device)
+            # perception_loss = 0.001 * perception_fn(output, hr)
+            loss = l1_loss + ssim_loss
 
+            with torch.no_grad():
+                loss_meter.update(loss.item())
+                psnr_meter.update(cal_psnr(output, hr).item())
+                ssim_meter.update(cal_ssim(output, hr).item())
+
+
+        # loss.backward()
+        # optimizer.step()
         scaler.scale(loss).backward()
         scaler.step(optimizer)
         scaler.update()
 
-        loss_meter.update(loss.item())
-        psnr_meter.update(cal_psnr(output, hr))
-        ssim_meter.update(cal_ssim(output, hr))
 
         loop.set_description('Epoch{}'.format(epoch))
         loop.set_postfix(loss=loss_meter.avg,
                          psnr=psnr_meter.avg,
-                         ssim=ssim_meter.avg)
+                         ssim=ssim_meter.avg,
+                         lr=optimizer.param_groups[0]['lr'])
     epoch_loss = loss_meter.avg
     epoch_psnr = psnr_meter.avg
     epoch_ssim = ssim_meter.avg
@@ -127,8 +137,8 @@ def validate_epoch(model, val_dataloader):
     ssim_meter = AverageMeter()
 
     for lr, hr, _ in loop:
-        lr = lr.to(device)
-        hr = hr.to(device)
+        lr = (lr.float() / 255.0).to(device)
+        hr = (hr.float() / 255.0).to(device)
 
         with autocast():
             output = model(lr).to(device)
@@ -139,12 +149,13 @@ def validate_epoch(model, val_dataloader):
             loss = l1_loss + ssim_loss + perception_loss
 
         loss_meter.update(loss.item())
-        psnr_meter.update(cal_psnr(output, hr))
-        ssim_meter.update(cal_ssim(output, hr))
+        psnr_meter.update(cal_psnr(output, hr).item())
+        ssim_meter.update(cal_ssim(output, hr).item())
 
         loop.set_description('Validation')
         loop.set_postfix(loss=loss_meter.avg,
-                         psnr=psnr_meter.avg)
+                         psnr=psnr_meter.avg,
+                         ssim=ssim_meter.avg)
     val_loss = loss_meter.avg
     val_psnr = psnr_meter.avg
     val_ssim = ssim_meter.avg

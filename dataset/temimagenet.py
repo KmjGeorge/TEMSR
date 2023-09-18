@@ -20,41 +20,46 @@ class TEMImageNet_Aug(Dataset):
         self.lrs = []
         self.hrs = []
 
-
         for filename in os.listdir(path):
-            image = Image.open(os.path.join(path, filename)).resize(aug['orig_size'], Image.Resampling.LANCZOS).convert('L')
+            image = Image.open(os.path.join(path, filename)).resize(aug['orig_size'], Image.Resampling.LANCZOS).convert(
+                'L')
             orig_images.append(image)
 
         if aug['method']:
             self.hrs = orig_images
             for image in orig_images:
-                self.lrs.append(
-                    image.resize((aug['downscale'] * aug['orig_size'][0], aug['downscale'] * aug['orig_size'][1]),
-                                 Image.NEAREST))
+                resize = image.resize((aug['downscale'] * aug['orig_size'][0], aug['downscale'] * aug['orig_size'][1]),
+                                      Image.NEAREST)
+                resize = np.array(resize)
+                self.lrs.append(resize)
 
         elif aug['method'] == 'sub1':
             self.lrs, self.hrs = multiscale_aug.sub_process1(images=orig_images,
                                                              hr_size=aug['crop_size'],
                                                              crop_down_scale=aug['crop_scale'],
-                                                             crop_times=aug['crop_times'])
+                                                             crop_times=aug['crop_times'],
+                                                             )
         elif aug['method'] == 'sub2':
             self.lrs, self.hrs = multiscale_aug.sub_process2(images=orig_images,
                                                              hr_size=aug['crop_size'],
                                                              down_scale=aug['scale'],
                                                              crop_down_scale=aug['crop_scale'],
-                                                             crop_times=aug['crop_times'])
+                                                             crop_times=aug['crop_times'],
+                                                             )
         elif aug['method'] == 'sub3':
             self.lrs, self.hrs = multiscale_aug.sub_process3(images=orig_images,
                                                              hr_size=aug['crop_size'],
                                                              up_scale=aug['scale'],
                                                              crop_down_scale=aug['crop_scale'],
-                                                             crop_times=aug['crop_times'])
+                                                             crop_times=aug['crop_times'],
+                                                            )
         elif aug['method'] == 'sub4':
             self.lrs, self.hrs = multiscale_aug.sub_process4(images=orig_images,
                                                              lr_size=aug['crop_size'],
                                                              down_scale=aug['scale'],
                                                              crop_up_scale=aug['crop_scale'],
-                                                             crop_times=aug['crop_times'])
+                                                             crop_times=aug['crop_times'],
+                                                             )
 
     def __len__(self):
         return len(self.lrs)
@@ -69,7 +74,8 @@ class TEMImageNet(Dataset):
         self.lrs = []
         self.filenames = []
         for filename in tqdm(os.listdir(path)):
-            image = Image.open(os.path.join(path, filename)).resize(aug['orig_size'], Image.Resampling.LANCZOS).convert('L')
+            image = Image.open(os.path.join(path, filename)).resize(aug['orig_size'], Image.Resampling.LANCZOS).convert(
+                'L')
             image = np.array(image)
             image = image[np.newaxis, ...]
             self.lrs.append(image)
@@ -89,7 +95,7 @@ class TEMImageNet(Dataset):
 
 def get_temimagenet_trainval():
     dataset = TEMImageNet(path=configs.dataset_config['path'],
-                          hr_path=configs.dataset_config['path'] + '../noNoiseNoBackgroundSuperresolution/',
+                          hr_path=configs.dataset_config['path'] + '../noNoise/',
                           aug=configs.multiscale_aug_config)
     train_split = configs.dataset_config['train_split']
     train_dataset, val_dataset = random_split(dataset, [train_split, 1 - train_split])
@@ -116,9 +122,9 @@ if __name__ == '__main__':
             break
         plt.subplot(121)
         plt.title('{} lr'.format(filename[0]))
-        plt.imshow(lr[0], 'gray')
+        plt.imshow(np.squeeze(lr[0]), 'gray')
         plt.subplot(122)
         plt.title('{} hr'.format(filename[0]))
-        plt.imshow(hr[0], 'gray')
+        plt.imshow(np.squeeze(hr[0]), 'gray')
         plt.show()
         i += 1
