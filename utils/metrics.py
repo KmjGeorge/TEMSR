@@ -178,7 +178,9 @@ if __name__ == '__main__':
     im2 = np.array(Image.open('../00310.png').convert('L'))
     im1 = im1[np.newaxis, np.newaxis, ...]
     im2 = im2[np.newaxis, np.newaxis, ...]
-    im1 = torch.from_numpy(im1).float().cuda()
-    im2 = torch.from_numpy(im2).float().cuda()
+    im1 = (torch.from_numpy(im1).float() / 255.0).cuda()
+    im2 = (torch.from_numpy(im2).float() / 255.0).cuda()
     ssim = cal_ssim(im1, im2)
-    print(ssim)
+    psnr = cal_psnr(im1, im2)
+    print(ssim.item())
+    print(psnr.item())

@@ -120,11 +120,12 @@ if __name__ == '__main__':
     for lr, hr, filename in train:
         if i == 2:
             break
-        plt.subplot(121)
-        plt.title('{} lr'.format(filename[0]))
-        plt.imshow(np.squeeze(lr[0]), 'gray')
-        plt.subplot(122)
-        plt.title('{} hr'.format(filename[0]))
-        plt.imshow(np.squeeze(hr[0]), 'gray')
-        plt.show()
-        i += 1
+        for j in range(4):
+            plt.subplot(121)
+            plt.title('{} lr'.format(filename[j]))
+            plt.imshow(np.squeeze(lr[j]), 'gray')
+            plt.subplot(122)
+            plt.title('{} hr'.format(filename[j]))
+            plt.imshow(np.squeeze(hr[j]), 'gray')
+            plt.show()
+            i += 1
