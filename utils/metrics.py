@@ -2,11 +2,14 @@ import torch
 import torch.nn.functional as F
 import numpy as np
 from math import exp
+
+import torchvision.transforms
 from torch.autograd import Variable
 import torch.nn as nn
 from torchvision.models import vgg19, vgg16_bn
 import pytorch_ssim
-
+import torchvision.transforms as ttf
+import lpips
 import configs
 
 
@@ -107,8 +110,9 @@ class FeatureLoss(nn.Module):
 
         # normalize foreground pixels to ImageNet statistics for pre-trained VGG
         mean, std = [0.485, 0.456, 0.406], [0.229, 0.224, 0.225]
-        inputs = F.normalize(inputs, mean, std)
-        targets = F.normalize(targets, mean, std)
+        trans = torchvision.transforms.Normalize(mean, std)
+        inputs = trans(inputs)
+        targets = trans(targets)
 
         # extract feature maps
         self.features(inputs)
@@ -182,5 +186,7 @@ if __name__ == '__main__':
     im2 = (torch.from_numpy(im2).float() / 255.0).cuda()
     ssim = cal_ssim(im1, im2)
     psnr = cal_psnr(im1, im2)
-    print(ssim.item())
-    print(psnr.item())
+    lpips_fn = lpips.LPIPS(net='vgg').cuda()
+    print('ssim=', ssim.item())
+    print('psnr=', psnr.item())
+    print('lpips=', lpips_fn(im1, im2).item())

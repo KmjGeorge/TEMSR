@@ -1,4 +1,4 @@
-from torch.optim.lr_scheduler import _LRScheduler
+from torch.optim.lr_scheduler import _LRScheduler, CosineAnnealingLR
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 import torch
 import numpy as np
@@ -198,3 +198,30 @@ def ExpWarmupCosineDownScheduler(optimizer, warmup, rampdown_length, num_epochs)
                                              exp_warmup_cosine_down(warmup, rampdown_length, num_epochs))
 
 
+if __name__ == '__main__':
+    import matplotlib.pyplot as plt
+    from torch.optim import Adam
+    from models.SwinIR import get_swinir
+
+    MAX_EPOCH = 30
+    WARMUP_EPOCH = 5
+    model = get_swinir()
+
+    optimizer = Adam(model.parameters(), lr=1e-6, weight_decay=0.001)
+
+    # 先逐步增加至初始学习率，然后使用余弦退火
+    scheduler_cos = CosineAnnealingLR(optimizer, T_max=MAX_EPOCH - WARMUP_EPOCH, eta_min=1e-7)
+    scheduler_warmup = GradualWarmupScheduler(optimizer, multiplier=1, total_epoch=WARMUP_EPOCH,
+                                              after_scheduler=scheduler_cos)
+    scheduler_warmup.step()
+    lr_list = []
+    for epoch in range(MAX_EPOCH):
+        scheduler_warmup.step()
+        # scheduler_exp_warmup_linear_down.step()
+        # scheduler_exp_warmup_cosine_down.step()
+        cur_lr = optimizer.param_groups[0]['lr']
+        lr_list.append(cur_lr)
+        print(epoch + 1, cur_lr)
+
+    plt.plot(lr_list)
+    plt.show()

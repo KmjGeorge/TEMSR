@@ -256,7 +256,6 @@ class HighNet(nn.Module):
     def forward(self, x, y_down, y_down_amp, y_down_phase):
         x_ori = x
         x = self.conv0(x)  # 3*64=192
-
         x1 = self.conv1(x, y_down_amp, y_down_phase)
         # x2 = self.conv2(x1, y_down_amp, y_down_phase)
 
@@ -313,9 +312,9 @@ class LowNet(nn.Module):
 
 
 class InteractNet(nn.Module):
-    def __init__(self, nc=16):
+    def __init__(self, in_chans=3, nc=16):
         super(InteractNet, self).__init__()
-        self.extract = nn.Conv2d(3, nc // 2, 1, 1, 0)
+        self.extract = nn.Conv2d(in_chans, nc // 2, 1, 1, 0)
         self.lownet = LowNet(nc // 2, nc * 12)
         self.highnet = HighNet(nc)
 
@@ -323,7 +322,13 @@ class InteractNet(nn.Module):
         x_f = self.extract(x)
         x_f_down = F.interpolate(x_f, scale_factor=0.125, mode='bilinear')
         y_down, y_down_amp, y_down_phase = self.lownet(x_f_down)
+
         y = self.highnet(x, y_down, y_down_amp, y_down_phase)
+        # return y, y_down
+        return y
 
-        return y, y_down
 
+def get_uhdfour():
+    from configs import uhdfour_config
+    model = InteractNet(**uhdfour_config)
+    return model

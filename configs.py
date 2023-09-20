@@ -6,10 +6,12 @@ import random
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 dataset_config = {
-    'path': 'D:/Datasets/TEM-ImageNet-v1.3-master/image/',
+    'lr_path': 'D:/Datasets/TEM-ImageNet-v1.3-master/image/',
+    'hr_path': 'D:/Datasets/TEM-ImageNet-v1.3-master/noBackgroundnoNoise/',
+    'channel': 3,
     'train_split': 0.8,
     'num_workers': 1,
-    'batchsize': 4,
+    'batchsize': 16,
     'shuffle': True,
 }
 
@@ -23,24 +25,26 @@ multiscale_aug_config = {
 }
 
 training_config = {
-    'task_name': 'swinIR_test1',
+    'task_name': 'denosing+debg_uhdfour_3loss',
     'seed': 50,
-    'epochs': 100,
+    'epochs': 30,
     'start_epoch': 0,
-    'criterion': 'ce',
-    'model': 'swinIR',
+    'model': 'uhdfour',
+    'half_precision': False,
     'optim_config': {
         'name': 'Adam',
-        'lr': 5e-4,
+        'lr': 1e-5,
         'weight_decay': 0.001,
     },
     'scheduler_config': {
         'multiplier': 1,
         'warmup_epoch': 5,
-        'down_epoch': 60,
-        'eta_min': 1e-2,
+        'eta_min': 1e-6,
     },
-    'validate_step': 1,
+    'validation': {
+        'enable': True,
+        'step': 1
+    },
     'save': {
         'enable': True,
         'step': 1,
@@ -54,7 +58,7 @@ swinir_config = {
     'window_size': 8,
     'img_range': 1.,
     'in_chans': 1,
-    'depths': [2, 2, 2, 2],
+    'depths': [2, 3, 3, 2],
     'embed_dim': 60,
     'num_heads': [4, 4, 4, 4],
     'mlp_ratio': 2,
@@ -62,20 +66,10 @@ swinir_config = {
 
 }
 
-
-def setup_seed(seed):
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-    np.random.seed(seed)
-    random.seed(seed)
-    torch.backends.cudnn.deterministic = True
+uhdfour_config = {
+    'in_chans': 3,
+    'nc': 16
+}
 
 
-def save_config():
-    import json
-    configs = [dataset_config, multiscale_aug_config, training_config, swinir_config]
-    with open('logs/{}.json'.format(training_config['task_name']), 'w') as f:
-        json.dump(configs, f)
 
-
-setup_seed(training_config['seed'])
