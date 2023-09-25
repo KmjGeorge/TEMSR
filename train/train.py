@@ -14,7 +14,8 @@ from tqdm import tqdm
 from utils.metrics import cal_psnr, cal_ssim, PerceptualLoss
 import torch.nn.functional as F
 import numpy as np
-
+from utils.optimizer import Lion
+from utils.metrics import cal_atom_loss, atom_loss_fn
 device = configs.device
 
 
@@ -44,6 +45,7 @@ class Log:
         lr_info = 'lr: ' + str(self.lr_list) + '\n'
         return epoch_info + loss_info + psnr_info + ssim_info + lpips_info + lr_info
 
+
 class AverageMeter:
     """Computes and stores the average and current value"""
 
@@ -65,12 +67,22 @@ class AverageMeter:
 
 def sr_train(model, train_dataloader, val_dataloader, training_config):
     perception_fn = lpips.LPIPS(net='vgg').to(configs.device)
+    atom_fn = atom_loss_fn()
     train_log = Log()
     val_log = Log()
     optim_config = training_config['optim_config']
     scheduler_config = training_config['scheduler_config']
-    optimizer = torch.optim.Adam(model.parameters(), lr=optim_config['lr'],
-                                 weight_decay=optim_config['weight_decay'])
+    if optim_config['name'] == 'Adam':
+        optimizer = torch.optim.Adam(model.parameters(), lr=optim_config['lr'],
+                                     weight_decay=optim_config['weight_decay'], betas=optim_config['betas'])
+    elif optim_config['name'] == 'AdamW':
+        optimizer = torch.optim.AdamW(model.parameters(), lr=optim_config['lr'],
+                                      weight_decay=optim_config['weight_decay'], betas=optim_config['betas'])
+    elif optim_config['name'] == 'Lion':
+        optimizer = Lion(model.parameters(), lr=optim_config['lr'],
+                         weight_decay=optim_config['weight_decay'], betas=optim_config['betas'])
+    else:
+        raise 'Error optimizer name!'
     scheduler_cos = CosineAnnealingLR(optimizer,
                                       T_max=training_config['epochs'] - scheduler_config['warmup_epoch'],
                                       eta_min=scheduler_config['eta_min'])
@@ -82,14 +94,14 @@ def sr_train(model, train_dataloader, val_dataloader, training_config):
     for epoch in range(1, training_config['epochs'] + 1):
 
         # train
-        epoch_loss, epoch_psnr, epoch_ssim, epoch_lpips = train_epoch(model, train_dataloader, optimizer, perception_fn,
+        epoch_loss, epoch_psnr, epoch_ssim, epoch_lpips = train_epoch(model, train_dataloader, optimizer, perception_fn, atom_fn,
                                                                       scaler, epoch)
         train_log.add(epoch, epoch_loss, epoch_psnr, epoch_ssim, epoch_lpips, optimizer.param_groups[0]['lr'])
 
         # val
         if training_config['validation']['enable']:
             if epoch % training_config['validation']['step'] == 0:
-                val_loss, val_psnr, val_ssim, val_lpips = validate_epoch(model, val_dataloader, epoch, perception_fn)
+                val_loss, val_psnr, val_ssim, val_lpips = validate_epoch(model, val_dataloader, epoch, perception_fn, atom_fn)
                 val_log.add(epoch, val_loss, val_psnr, val_ssim, val_lpips, np.nan)
         # save
         if training_config['save']['enable']:
@@ -100,7 +112,7 @@ def sr_train(model, train_dataloader, val_dataloader, training_config):
         scheduler.step()
 
 
-def train_epoch(model, train_dataloader, optimizer, perception_loss_fn, scaler, epoch):
+def train_epoch(model, train_dataloader, optimizer, perception_loss_fn, atom_fn, scaler, epoch):
     model.train()
     loop = tqdm(train_dataloader)
     loss_meter = AverageMeter()
@@ -108,7 +120,7 @@ def train_epoch(model, train_dataloader, optimizer, perception_loss_fn, scaler, 
     ssim_meter = AverageMeter()
     lpips_meter = AverageMeter()
 
-    for lr, hr, _ in loop:
+    for lr, hr, _, _ in loop:
         lr = (lr.float() / 255.0).to(device)
         hr = (hr.float() / 255.0).to(device)
 
@@ -120,7 +132,8 @@ def train_epoch(model, train_dataloader, optimizer, perception_loss_fn, scaler, 
                 ssim_loss = 1 * (1 - cal_ssim(output, hr))
                 perception_loss = 1 * perception_loss_fn(output, hr)
                 perception_loss = torch.mean(perception_loss, dim=0).squeeze_().squeeze_().squeeze_()
-                loss = l1_loss + ssim_loss + perception_loss
+                atom_loss = 100 * cal_atom_loss(atom_fn, output, hr)
+                loss = l1_loss + ssim_loss + perception_loss + atom_loss
                 scaler.scale(loss).backward()
                 scaler.step(optimizer)
                 scaler.update()
@@ -130,7 +143,8 @@ def train_epoch(model, train_dataloader, optimizer, perception_loss_fn, scaler, 
             ssim_loss = 1 * (1 - cal_ssim(output, hr))
             perception_loss = perception_loss_fn(output, hr)
             perception_loss = 1 * torch.mean(perception_loss, dim=0).squeeze_().squeeze_().squeeze_()
-            loss = l1_loss + ssim_loss + perception_loss
+            atom_loss = 100 * cal_atom_loss(atom_fn, output, hr)
+            loss = l1_loss + ssim_loss + perception_loss + atom_loss
             loss.backward()
             optimizer.step()
 
@@ -153,7 +167,7 @@ def train_epoch(model, train_dataloader, optimizer, perception_loss_fn, scaler, 
     return epoch_loss, epoch_psnr, epoch_ssim, epoch_lpips
 
 
-def validate_epoch(model, val_dataloader, epoch, perception_loss_fn):
+def validate_epoch(model, val_dataloader, epoch, perception_loss_fn, atom_fn):
     model.eval()
     loop = tqdm(val_dataloader)
     loss_meter = AverageMeter()
@@ -161,7 +175,7 @@ def validate_epoch(model, val_dataloader, epoch, perception_loss_fn):
     ssim_meter = AverageMeter()
     lpips_meter = AverageMeter()
 
-    for lr, hr, _ in loop:
+    for lr, hr, _, _ in loop:
         lr = (lr.float() / 255.0).to(device)
         hr = (hr.float() / 255.0).to(device)
         with torch.no_grad():
@@ -172,14 +186,16 @@ def validate_epoch(model, val_dataloader, epoch, perception_loss_fn):
                     ssim_loss = 1 * (1 - cal_ssim(output, hr))
                     perception_loss = 1 * perception_loss_fn(output, hr)
                     perception_loss = torch.mean(perception_loss, dim=0).squeeze_().squeeze_().squeeze_()
-                    loss = l1_loss + ssim_loss + perception_loss
+                    atom_loss = 100 * cal_atom_loss(atom_fn, output, hr)
+                    loss = l1_loss + ssim_loss + perception_loss + atom_loss
             else:
                 output = model(lr).to(device)
                 l1_loss = 5 * F.smooth_l1_loss(output, hr)
                 ssim_loss = 1 * (1 - cal_ssim(output, hr))
                 perception_loss = 1 * perception_loss_fn(output, hr)
                 perception_loss = torch.mean(perception_loss, dim=0).squeeze_().squeeze_().squeeze_()
-                loss = l1_loss + ssim_loss + perception_loss
+                atom_loss = 100 * cal_atom_loss(atom_fn, output, hr)
+                loss = l1_loss + ssim_loss + perception_loss + atom_loss
             loss_meter.update(loss.item())
             psnr_meter.update(cal_psnr(output, hr).item())
             ssim_meter.update(cal_ssim(output, hr).item())
@@ -252,5 +268,4 @@ def save(train_log, val_log, model, savename, epoch, start_epoch):
 
     plt.tight_layout()
     plt.savefig('./logs/{}/{}_figure.png'.format(savename, savename), dpi=300)
-    plt.clf()   # 清空画布防止legend堆叠
-
+    plt.clf()  # 清空画布防止legend堆叠

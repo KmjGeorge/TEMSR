@@ -6,6 +6,8 @@ from torch.nn import Module, Sequential, Conv2d, ReLU, AdaptiveMaxPool2d, Adapti
     NLLLoss, BCELoss, CrossEntropyLoss, AvgPool2d, MaxPool2d, Parameter, Linear, Sigmoid, Softmax, Dropout, Embedding
 from torch.nn import functional as F
 
+import configs
+
 torch_ver = torch.__version__[:3]
 
 
@@ -258,105 +260,6 @@ def calculate_valid_crop_size(crop_size, upscale_factor):
     return crop_size - (crop_size % upscale_factor)
 
 
-def input_transform(crop_size, upscale_factor):
-    return Compose([
-        CenterCrop(crop_size),
-        Resize(crop_size // upscale_factor),
-        ToTensor(),
-    ])
-
-
-def target_transform(crop_size):
-    return Compose([
-        CenterCrop(crop_size),
-        ToTensor(),
-    ])
-
-
-def channel_convert(in_c, tar_type, img_list):
-    # conversion among BGR, gray and y
-    if in_c == 3 and tar_type == 'gray':  # BGR to gray
-        gray_list = [cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) for img in img_list]
-        return [np.expand_dims(img, axis=2) for img in gray_list]
-    elif in_c == 3 and tar_type == 'y':  # BGR to y
-        y_list = [bgr2ycbcr(img, only_y=True) for img in img_list]
-        return [np.expand_dims(img, axis=2) for img in y_list]
-    elif in_c == 1 and tar_type == 'RGB':  # gray/y to BGR
-        return [cv2.cvtColor(img, cv2.COLOR_GRAY2BGR) for img in img_list]
-    else:
-        return img_list
-
-
-def rgb2ycbcr(img, only_y=True):
-    '''same as matlab rgb2ycbcr
-    only_y: only return Y channel
-    Input:
-        uint8, [0, 255]
-        float, [0, 1]
-    '''
-    in_img_type = img.dtype
-    img.astype(np.float32)
-    if in_img_type != np.uint8:
-        img *= 255.
-    # convert
-    if only_y:
-        rlt = np.dot(img, [65.481, 128.553, 24.966]) / 255.0 + 16.0
-    else:
-        rlt = np.matmul(img, [[65.481, -37.797, 112.0], [128.553, -74.203, -93.786],
-                              [24.966, 112.0, -18.214]]) / 255.0 + [16, 128, 128]
-    if in_img_type == np.uint8:
-        rlt = rlt.round()
-    else:
-        rlt /= 255.
-    return rlt.astype(in_img_type)
-
-
-def bgr2ycbcr(img, only_y=True):
-    '''bgr version of rgb2ycbcr
-    only_y: only return Y channel
-    Input:
-        uint8, [0, 255]
-        float, [0, 1]
-        dtype查看type
-        astype转换type
-    '''
-    in_img_type = img.dtype
-    img.astype(np.float32)
-    if in_img_type != np.uint8:
-        img *= 255.
-    # convert
-    if only_y:
-        rlt = np.dot(img, [24.966, 128.553, 65.481]) / 255.0 + 16.0
-    else:
-        rlt = np.matmul(img, [[24.966, 112.0, -18.214], [128.553, -74.203, -93.786],
-                              [65.481, -37.797, 112.0]]) / 255.0 + [16, 128, 128]
-    if in_img_type == np.uint8:
-        rlt = rlt.round()
-    else:
-        rlt /= 255.
-    return rlt.astype(in_img_type)
-
-
-def ycbcr2rgb(img):
-    '''same as matlab ycbcr2rgb
-    Input:
-        uint8, [0, 255]
-        float, [0, 1]
-    '''
-    in_img_type = img.dtype
-    img.astype(np.float32)
-    if in_img_type != np.uint8:
-        img *= 255.
-    # convert
-    rlt = np.matmul(img, [[0.00456621, 0.00456621, 0.00456621], [0, -0.00153632, 0.00791071],
-                          [0.00625893, -0.00318811, 0]]) * 255.0 + [-222.921, 135.576, -276.836]
-    if in_img_type == np.uint8:
-        rlt = rlt.round()
-    else:
-        rlt /= 255.
-    return rlt.astype(in_img_type)
-
-
 class CALayer(nn.Module):
     def __init__(self, channel, reduction=16):
         super(CALayer, self).__init__()
@@ -423,15 +326,15 @@ class RG(nn.Module):
 
 
 class DRAN(nn.Module):
-    def __init__(self, args, conv=common.default_conv):
+    def __init__(self, n_feats=64, n_resblocks=24, n_resgroups=24, scale=4, n_colors=3, conv=default_conv):
         super(DRAN, self).__init__()
 
-        n_feat = args.n_feats
-        self.n_blocks = args.n_resblocks
-        self.n_resgroups = args.n_resgroups
+        n_feat = n_feats
+        self.n_blocks = n_resblocks
+        self.n_resgroups = n_resgroups
 
         kernel_size = 3
-        scale = args.scale
+        scale = scale
         act = nn.ReLU(True)
 
         # RGB mean for DIV2K
@@ -440,8 +343,8 @@ class DRAN(nn.Module):
         self.sub_mean = MeanShift(255.0, rgb_mean, rgb_std)
 
         # define head module
-        modules_head = [conv(args.n_colors, n_feat, kernel_size)]
-        # modules_head = [nn.Conv2d(args.n_colors, n_feat, 5, 1, 2)]
+        modules_head = [conv(n_colors, n_feat, kernel_size)]
+        # modules_head = [nn.Conv2d(n_colors, n_feat, 5, 1, 2)]
 
         # modules_head_2 = [conv(n_feat, n_feat, kernel_size)]
         self.conv1 = nn.Conv2d(n_feat, n_feat, kernel_size=1, stride=1, padding=0, bias=True),
@@ -452,9 +355,9 @@ class DRAN(nn.Module):
 
         modules_tail = [
             conv(n_feat, n_feat, kernel_size),
-            common.Upsampler(conv, scale, n_feat, act=False)
+            Upsampler(conv, scale, n_feat, act=False)
         ]
-        self.conv = conv(n_feat, args.n_colors, kernel_size)
+        self.conv = conv(n_feat, n_colors, kernel_size)
         self.add_mean = MeanShift(255, rgb_mean, rgb_std, 1)
 
         self.head_1 = nn.Sequential(*modules_head)
@@ -464,7 +367,7 @@ class DRAN(nn.Module):
 
         # self.body = nn.Sequential(*self.modules_body)
         self.tail = nn.Sequential(*modules_tail)
-        self.hfeb = HFIRM(nf=args.n_feats)
+        self.hfeb = HFIRM(nf=n_feats)
 
         self.ca = CALayer(channel=n_feat)
         self.sa = SALayer(kernel_size=7)
@@ -522,3 +425,9 @@ class DRAN(nn.Module):
             missing = set(own_state.keys()) - set(state_dict.keys())
             if len(missing) > 0:
                 raise KeyError('missing keys in state_dict: "{}"'.format(missing))
+
+
+# 原始输入为48*48
+def get_dran():
+    model = DRAN(**configs.dran_config)
+    return model

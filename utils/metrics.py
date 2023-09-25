@@ -1,3 +1,4 @@
+import matplotlib.pyplot as plt
 import torch
 import torch.nn.functional as F
 import numpy as np
@@ -11,6 +12,7 @@ import pytorch_ssim
 import torchvision.transforms as ttf
 import lpips
 import configs
+from models.AtomSegNet import UNet
 
 
 def cal_psnr(img1, img2):
@@ -176,8 +178,34 @@ def cal_ssim(img1, img2, window_size=11, size_average=True):
     return _ssim(img1, img2, window, window_size, channel, size_average)
 
 
+def atom_loss_fn(weight_path='./weights/gaussianMask+.pth'):
+    unet = UNet()
+    unet.load_state_dict(torch.load(weight_path))
+    unet = unet.eval().to(configs.device)
+    return unet
+
+
+def cal_atom_loss(atom_loss_fn, img1, img2):
+    # 转为单通道
+    img1_gray = torch.mean(img1, dim=1, keepdim=True)
+    img2_gray = torch.mean(img2, dim=1, keepdim=True)
+    img1_heatmap = atom_loss_fn(img1_gray)
+    img2_heatmap = atom_loss_fn(img2_gray)
+
+    # print(img1_heatmap)
+    # print(img2_heatmap)
+    # plt.subplot(121)
+    # plt.imshow(img1_heatmap[0].detach().squeeze_().cpu().numpy())
+    # plt.subplot(122)
+    # plt.imshow(img2_heatmap[0].detach().squeeze_().cpu().numpy())
+    # plt.show()
+    loss = F.smooth_l1_loss(img1_heatmap, img2_heatmap)
+    return loss
+
+
 if __name__ == '__main__':
     from PIL import Image
+
     im1 = np.array(Image.open('../00295.png').convert('L'))
     im2 = np.array(Image.open('../00310.png').convert('L'))
     im1 = im1[np.newaxis, np.newaxis, ...]

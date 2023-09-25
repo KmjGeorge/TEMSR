@@ -14,7 +14,7 @@ import configs
 from tqdm import tqdm
 from utils.functions import channel_swap, channel_expand
 
-
+# TODO
 class TEMImageNet_Aug(Dataset):
     def __init__(self, path, aug_config, channel=1):
         orig_images = []
@@ -71,41 +71,40 @@ class TEMImageNet_Aug(Dataset):
 
 class TEMImageNet(Dataset):
     def __init__(self, lr_path, hr_path, aug_config, channel=1):
-        self.hrs = []
-        self.lrs = []
-        self.filenames = []
+        self.lr_files = []
+        self.hr_files = []
+        self.channel = channel
+        self.lr_size = aug_config['orig_size']
+        for filename in os.listdir(lr_path):
+            self.lr_files.append(os.path.join(lr_path, filename))
 
-        # test_idx1 = 1
-        # test_idx2 = 1
-
-        for filename in tqdm(os.listdir(lr_path)):
-            # if test_idx1 == 100:
-            #     break
-            image = Image.open(os.path.join(lr_path, filename)).resize(aug_config['orig_size'],
-                                                                       Image.Resampling.LANCZOS)
-            image = np.array(image)
-            image = image[np.newaxis, ...]
-            if channel == 3:
-                image = channel_expand(image)
-            self.lrs.append(image)
-            self.filenames.append(filename)
-            # test_idx1 += 1
-        for filename in tqdm(os.listdir(hr_path)):
-            # if test_idx2 == 100:
-            #     break
-            image = Image.open(os.path.join(hr_path, filename))
-            image = np.array(image)
-            image = image[np.newaxis, ...]
-            if channel == 3:
-                image = channel_expand(image)
-            self.hrs.append(image)
-            # test_idx2 += 1
+        for filename in os.listdir(hr_path):
+            self.hr_files.append(os.path.join(hr_path, filename))
 
     def __len__(self):
-        return len(self.lrs)
+        return len(self.lr_files)
 
     def __getitem__(self, idx):
-        return self.lrs[idx], self.hrs[idx], self.filenames[idx]
+        lr_image = Image.open(self.lr_files[idx]).resize(self.lr_size, Image.Resampling.LANCZOS)
+        lr_image = np.array(lr_image)
+        lr_image = lr_image[np.newaxis, ...]
+        if self.channel == 3:
+            lr_image = channel_expand(lr_image)
+
+        hr_image = Image.open(self.hr_files[idx])
+        hr_image = np.array(hr_image)
+        hr_image = hr_image[np.newaxis, ...]
+        if self.channel == 3:
+            hr_image = channel_expand(hr_image)
+
+        return lr_image, hr_image, self.lr_files[idx], self.hr_files[idx]
+
+
+def down_interporlation(path, save_path, target_size=(128, 128), method=Image.BICUBIC):
+    for filename in tqdm(os.listdir(path)):
+        img = Image.open(os.path.join(path, filename)).resize(target_size, Image.BICUBIC)
+        img.save(os.path.join(save_path, filename))
+
 
 
 def get_temimagenet_trainval():
@@ -125,18 +124,23 @@ def get_temimagenet_trainval():
 
 
 if __name__ == '__main__':
+    down_interporlation('D:/Datasets/TEM-ImageNet-v1.3-master/image/', 'D:/Datasets/TEM-ImageNet-v1.3-master/image_NEAREST_128', (128, 128), Image.NEAREST)
+    assert False
     train, val = get_temimagenet_trainval()
-
+    from utils.functions import setup_seed
+    setup_seed(50)
     i = 1
-    for lr, hr, filename in train:
+    for lr, hr, file_lr, file_hr in train:
         if i == 2:
             break
         for j in range(2):
             plt.subplot(121)
-            plt.title('{} lr'.format(filename[j]))
+            filename_lr = os.path.split(file_lr[j])[1]
+            plt.title('{} lr'.format(filename_lr))
             plt.imshow(channel_swap(np.squeeze(lr[j])))
             plt.subplot(122)
-            plt.title('{} hr'.format(filename[j]))
+            filename_hr = os.path.split(file_hr[j])[1]
+            plt.title('{} hr'.format(filename_hr))
             plt.imshow(channel_swap(np.squeeze(hr[j])))
             plt.show()
         i += 1

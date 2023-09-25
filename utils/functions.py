@@ -32,7 +32,7 @@ def image_for_network(image, target_c=3):  # Single PIL image Object -> tensor f
     return image_tensor
 
 
-def image_for_draw(image):  # network output tensor -> np array for plt drawing (h, w, c)
+def image_for_draw(image):  # network output tensor -> np array for plt drawing (h, w, c) uint8
     return channel_swap(torch.squeeze(torch.squeeze(image)).cpu().detach().numpy())
 
 
