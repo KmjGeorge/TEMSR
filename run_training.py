@@ -26,8 +26,8 @@ if __name__ == '__main__':
     setup_seed(configs.training_config['seed'])
 
     model = get_model(configs.training_config['model'])
+    model.load_state_dict(torch.load('./weights/denosing+debg+sr2x_uhdfour_3loss 5e-5/denosing+debg+sr2x_uhdfour_3loss 5e-5_epoch19.pt'))
     summary(model, input_size=(configs.dataset_config['channel'], configs.multiscale_aug_config['orig_size'][0], configs.multiscale_aug_config['orig_size'][1]))
-    # assert False
     train_loader, val_loader = get_temimagenet_trainval()
     sr_train(model, train_loader, val_loader, configs.training_config)
 

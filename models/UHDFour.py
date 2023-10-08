@@ -8,6 +8,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 
+import configs
+
 
 class UNetConvBlock(nn.Module):
     def __init__(self, in_size, out_size, relu_slope=0.1, use_HIN=True):
@@ -238,20 +240,21 @@ def coeff_apply(InputTensor, CoeffTensor, isoffset=True):
 
 
 class HighNet(nn.Module):
-    def __init__(self, nc):
+    def __init__(self, nc, upsample_scale=1):
         super(HighNet, self).__init__()
         self.conv0 = nn.PixelUnshuffle(8)
         self.conv1 = ProcessBlockAdjust(nc * 12)
         # self.conv2 = ProcessBlockAdjust(nc)
-        self.conv3 = ProcessBlock(nc * 12)
-        self.conv4 = ProcessBlock(nc * 12)
+        # self.conv3 = ProcessBlock(nc * 12)
+        # self.conv4 = ProcessBlock(nc * 12)
         self.conv5 = nn.PixelShuffle(8)
         self.convout = nn.Conv2d(nc * 12 // 64, 3, 3, 1, 1)
         self.trans = nn.Conv2d(6, 16, 1, 1, 0)
-        self.con_temp1 = nn.Conv2d(16, 16, 3, 1, 1)
-        self.con_temp2 = nn.Conv2d(16, 16, 3, 1, 1)
-        self.con_temp3 = nn.Conv2d(16, 3, 3, 1, 1)
-        self.LeakyReLU = nn.LeakyReLU(0.1, inplace=False)
+        # self.con_temp1 = nn.Conv2d(16, 16, 3, 1, 1)
+        self.con_temp2 = nn.Conv2d(3, 8 * upsample_scale, 3, 1, 1)
+        self.con_upsample = nn.PixelShuffle(upsample_scale)
+        self.con_temp3 = nn.Conv2d(8 // upsample_scale, 3, 3, 1, 1)
+        # self.LeakyReLU = nn.LeakyReLU(0.1, inplace=False)
 
     def forward(self, x, y_down, y_down_amp, y_down_phase):
         x_ori = x
@@ -267,7 +270,13 @@ class HighNet(nn.Module):
         y_aff = self.trans(torch.cat([F.interpolate(y_down, scale_factor=8, mode='bilinear'), xout_temp], 1))
         # con_temp1=self.LeakyReLU(self.con_temp1(y_aff))
         # con_temp2=self.LeakyReLU(self.con_temp2(con_temp1))
-        xout = self.con_temp3(y_aff)
+
+        xout = self.con_temp2(xout_temp)
+
+        xout = self.con_upsample(xout)
+
+        xout = self.con_temp3(xout)
+
         # xout = coeff_apply(x_ori, y_aff)+xout
 
         return xout
@@ -312,11 +321,11 @@ class LowNet(nn.Module):
 
 
 class InteractNet(nn.Module):
-    def __init__(self, in_chans=3, nc=16):
+    def __init__(self, in_chans=3, nc=16, upsample_scale=1):
         super(InteractNet, self).__init__()
         self.extract = nn.Conv2d(in_chans, nc // 2, 1, 1, 0)
         self.lownet = LowNet(nc // 2, nc * 12)
-        self.highnet = HighNet(nc)
+        self.highnet = HighNet(nc, upsample_scale)
 
     def forward(self, x):
         x_f = self.extract(x)
@@ -332,3 +341,10 @@ def get_uhdfour():
     from configs import uhdfour_config
     model = InteractNet(**uhdfour_config)
     return model
+
+
+if __name__ == '__main__':
+    from torchsummary import summary
+
+    model = get_uhdfour().cuda()
+    summary(model, (3, 128, 128))

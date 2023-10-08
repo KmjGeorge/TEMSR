@@ -67,7 +67,10 @@ class AverageMeter:
 
 def sr_train(model, train_dataloader, val_dataloader, training_config):
     perception_fn = lpips.LPIPS(net='vgg').to(configs.device)
-    atom_fn = atom_loss_fn()
+    if training_config['atom_loss']['enable']:
+        atom_fn = atom_loss_fn(training_config['atom_loss']['unet_path'])
+    else:
+        atom_fn = None
     train_log = Log()
     val_log = Log()
     optim_config = training_config['optim_config']
@@ -132,8 +135,11 @@ def train_epoch(model, train_dataloader, optimizer, perception_loss_fn, atom_fn,
                 ssim_loss = 1 * (1 - cal_ssim(output, hr))
                 perception_loss = 1 * perception_loss_fn(output, hr)
                 perception_loss = torch.mean(perception_loss, dim=0).squeeze_().squeeze_().squeeze_()
-                atom_loss = 100 * cal_atom_loss(atom_fn, output, hr)
-                loss = l1_loss + ssim_loss + perception_loss + atom_loss
+                if configs.training_config['atom_loss']['enable']:
+                    atom_loss = configs.training_config['atom_loss']['loss_weight'] * cal_atom_loss(atom_fn, output, hr)
+                    loss = l1_loss + ssim_loss + perception_loss + atom_loss
+                else:
+                    loss = l1_loss + ssim_loss + perception_loss
                 scaler.scale(loss).backward()
                 scaler.step(optimizer)
                 scaler.update()
@@ -143,8 +149,11 @@ def train_epoch(model, train_dataloader, optimizer, perception_loss_fn, atom_fn,
             ssim_loss = 1 * (1 - cal_ssim(output, hr))
             perception_loss = perception_loss_fn(output, hr)
             perception_loss = 1 * torch.mean(perception_loss, dim=0).squeeze_().squeeze_().squeeze_()
-            atom_loss = 100 * cal_atom_loss(atom_fn, output, hr)
-            loss = l1_loss + ssim_loss + perception_loss + atom_loss
+            if configs.training_config['atom_loss']['enable']:
+                atom_loss = configs.training_config['atom_loss']['loss_weight'] * cal_atom_loss(atom_fn, output, hr)
+                loss = l1_loss + ssim_loss + perception_loss + atom_loss
+            else:
+                loss = l1_loss + ssim_loss + perception_loss
             loss.backward()
             optimizer.step()
 
@@ -154,7 +163,7 @@ def train_epoch(model, train_dataloader, optimizer, perception_loss_fn, atom_fn,
             ssim_meter.update(cal_ssim(output, hr).item())
             lpips_meter.update(perception_loss.item())
 
-        loop.set_description('Epoch {}'.format(epoch))
+        loop.set_description('Epoch {}'.format(epoch+configs.training_config['start_epoch']))
         loop.set_postfix(loss=loss_meter.avg,
                          psnr=psnr_meter.avg,
                          ssim=ssim_meter.avg,
@@ -186,16 +195,22 @@ def validate_epoch(model, val_dataloader, epoch, perception_loss_fn, atom_fn):
                     ssim_loss = 1 * (1 - cal_ssim(output, hr))
                     perception_loss = 1 * perception_loss_fn(output, hr)
                     perception_loss = torch.mean(perception_loss, dim=0).squeeze_().squeeze_().squeeze_()
-                    atom_loss = 100 * cal_atom_loss(atom_fn, output, hr)
-                    loss = l1_loss + ssim_loss + perception_loss + atom_loss
+                    if configs.training_config['atom_loss']['enable']:
+                        atom_loss = configs.training_config['atom_loss']['loss_weight'] * cal_atom_loss(atom_fn, output, hr)
+                        loss = l1_loss + ssim_loss + perception_loss + atom_loss
+                    else:
+                        loss = l1_loss + ssim_loss + perception_loss
             else:
                 output = model(lr).to(device)
                 l1_loss = 5 * F.smooth_l1_loss(output, hr)
                 ssim_loss = 1 * (1 - cal_ssim(output, hr))
                 perception_loss = 1 * perception_loss_fn(output, hr)
                 perception_loss = torch.mean(perception_loss, dim=0).squeeze_().squeeze_().squeeze_()
-                atom_loss = 100 * cal_atom_loss(atom_fn, output, hr)
-                loss = l1_loss + ssim_loss + perception_loss + atom_loss
+                if configs.training_config['atom_loss']['enable']:
+                    atom_loss = configs.training_config['atom_loss']['loss_weight'] * cal_atom_loss(atom_fn, output, hr)
+                    loss = l1_loss + ssim_loss + perception_loss + atom_loss
+                else:
+                    loss = l1_loss + ssim_loss + perception_loss
             loss_meter.update(loss.item())
             psnr_meter.update(cal_psnr(output, hr).item())
             ssim_meter.update(cal_ssim(output, hr).item())

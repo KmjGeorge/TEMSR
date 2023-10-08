@@ -124,23 +124,25 @@ def get_temimagenet_trainval():
 
 
 if __name__ == '__main__':
-    down_interporlation('D:/Datasets/TEM-ImageNet-v1.3-master/image/', 'D:/Datasets/TEM-ImageNet-v1.3-master/image_NEAREST_128', (128, 128), Image.NEAREST)
-    assert False
+
     train, val = get_temimagenet_trainval()
     from utils.functions import setup_seed
     setup_seed(50)
     i = 1
     for lr, hr, file_lr, file_hr in train:
-        if i == 2:
-            break
-        for j in range(2):
-            plt.subplot(121)
-            filename_lr = os.path.split(file_lr[j])[1]
-            plt.title('{} lr'.format(filename_lr))
-            plt.imshow(channel_swap(np.squeeze(lr[j])))
-            plt.subplot(122)
-            filename_hr = os.path.split(file_hr[j])[1]
-            plt.title('{} hr'.format(filename_hr))
-            plt.imshow(channel_swap(np.squeeze(hr[j])))
-            plt.show()
-        i += 1
+        lr = lr.cuda().float()
+        hr = hr.cuda().float()
+        # if i == 2:
+        #     break
+        # for j in range(2):
+        #     plt.subplot(121)
+        #     filename_lr = os.path.split(file_lr[j])[1]
+        #     plt.title('{} lr'.format(filename_lr))
+        #     plt.imshow(channel_swap(np.squeeze(lr[j])))
+        #     plt.subplot(122)
+        #     filename_hr = os.path.split(file_hr[j])[1]
+        #     plt.title('{} hr'.format(filename_hr))
+        #     plt.imshow(channel_swap(np.squeeze(hr[j])))
+        #     plt.show()
+        # i += 1
+

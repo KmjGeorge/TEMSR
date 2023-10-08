@@ -178,7 +178,7 @@ def cal_ssim(img1, img2, window_size=11, size_average=True):
     return _ssim(img1, img2, window, window_size, channel, size_average)
 
 
-def atom_loss_fn(weight_path='./weights/gaussianMask+.pth'):
+def atom_loss_fn(weight_path='./weights/circularMask.pth'):
     unet = UNet()
     unet.load_state_dict(torch.load(weight_path))
     unet = unet.eval().to(configs.device)
