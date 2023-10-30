@@ -145,10 +145,10 @@ def train_epoch(model, train_dataloader, optimizer, perception_loss_fn, atom_fn,
                 scaler.update()
         else:
             output = model(lr).to(device)
-            l1_loss = 5 * F.smooth_l1_loss(output, hr)
-            ssim_loss = 1 * (1 - cal_ssim(output, hr))
+            l1_loss = configs.training_config['loss_weight']['l1'] * F.smooth_l1_loss(output, hr)
+            ssim_loss = configs.training_config['loss_weight']['ssim'] * (1 - cal_ssim(output, hr))
             perception_loss = perception_loss_fn(output, hr)
-            perception_loss = 1 * torch.mean(perception_loss, dim=0).squeeze_().squeeze_().squeeze_()
+            perception_loss = configs.training_config['loss_weight']['lpips'] * torch.mean(perception_loss, dim=0).squeeze_().squeeze_().squeeze_()
             if configs.training_config['atom_loss']['enable']:
                 atom_loss = configs.training_config['atom_loss']['loss_weight'] * cal_atom_loss(atom_fn, output, hr)
                 loss = l1_loss + ssim_loss + perception_loss + atom_loss
@@ -191,9 +191,9 @@ def validate_epoch(model, val_dataloader, epoch, perception_loss_fn, atom_fn):
             if configs.training_config['half_precision']:
                 with autocast():
                     output = model(lr).to(device)
-                    l1_loss = 5 * F.smooth_l1_loss(output, hr)
-                    ssim_loss = 1 * (1 - cal_ssim(output, hr))
-                    perception_loss = 1 * perception_loss_fn(output, hr)
+                    l1_loss = configs.training_config['loss_weight']['l1'] * F.smooth_l1_loss(output, hr)
+                    ssim_loss = configs.training_config['loss_weight']['ssim'] * (1 - cal_ssim(output, hr))
+                    perception_loss = configs.training_config['loss_weight']['lpips'] * perception_loss_fn(output, hr)
                     perception_loss = torch.mean(perception_loss, dim=0).squeeze_().squeeze_().squeeze_()
                     if configs.training_config['atom_loss']['enable']:
                         atom_loss = configs.training_config['atom_loss']['loss_weight'] * cal_atom_loss(atom_fn, output, hr)

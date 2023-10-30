@@ -239,8 +239,40 @@ def coeff_apply(InputTensor, CoeffTensor, isoffset=True):
     return torch.cat(outList, dim=1)
 
 
+class HighNet_orig(nn.Module):
+    def __init__(self, nc):
+        super(HighNet_orig, self).__init__()
+        self.conv0 = nn.PixelUnshuffle(8)
+        self.conv1 = ProcessBlockAdjust(nc * 12)
+        # self.conv2 = ProcessBlockAdjust(nc)
+        self.conv3 = ProcessBlock(nc * 12)
+        self.conv4 = ProcessBlock(nc * 12)
+        self.conv5 = nn.PixelShuffle(8)
+        self.convout = nn.Conv2d(nc * 12 // 64, 3, 3, 1, 1)
+        self.trans = nn.Conv2d(6, 16, 1, 1, 0)
+        self.con_temp3 = nn.Conv2d(16, 3, 3, 1, 1)
+        self.LeakyReLU = nn.LeakyReLU(0.1, inplace=False)
+
+    def forward(self, x, y_down, y_down_amp, y_down_phase):
+        x_ori = x
+        x = self.conv0(x)  # 3*64=192
+        x1 = self.conv1(x, y_down_amp, y_down_phase)
+        # x2 = self.conv2(x1, y_down_amp, y_down_phase)
+
+        # x3 = self.conv3(x1)
+        # x4 = self.conv4(x3)
+        x5 = self.conv5(x1)
+
+        xout_temp = self.convout(x5)
+        y_aff = self.trans(torch.cat([F.interpolate(y_down, scale_factor=8, mode='bilinear'), xout_temp], 1))
+        xout = self.con_temp3(y_aff)
+        # xout = coeff_apply(x_ori, y_aff)+xout
+
+        return xout
+
+
 class HighNet(nn.Module):
-    def __init__(self, nc, upsample_scale=1):
+    def __init__(self, nc, upsample_scale=2):
         super(HighNet, self).__init__()
         self.conv0 = nn.PixelUnshuffle(8)
         self.conv1 = ProcessBlockAdjust(nc * 12)
@@ -257,27 +289,13 @@ class HighNet(nn.Module):
         # self.LeakyReLU = nn.LeakyReLU(0.1, inplace=False)
 
     def forward(self, x, y_down, y_down_amp, y_down_phase):
-        x_ori = x
         x = self.conv0(x)  # 3*64=192
         x1 = self.conv1(x, y_down_amp, y_down_phase)
-        # x2 = self.conv2(x1, y_down_amp, y_down_phase)
-
-        # x3 = self.conv3(x1)
-        # x4 = self.conv4(x3)
         x5 = self.conv5(x1)
-
         xout_temp = self.convout(x5)
         y_aff = self.trans(torch.cat([F.interpolate(y_down, scale_factor=8, mode='bilinear'), xout_temp], 1))
-        # con_temp1=self.LeakyReLU(self.con_temp1(y_aff))
-        # con_temp2=self.LeakyReLU(self.con_temp2(con_temp1))
-
-        xout = self.con_temp2(xout_temp)
-
-        xout = self.con_upsample(xout)
-
-        xout = self.con_temp3(xout)
-
-        # xout = coeff_apply(x_ori, y_aff)+xout
+        y_aff = self.con_upsample(y_aff)
+        xout = self.con_temp3(y_aff)
 
         return xout
 
@@ -325,7 +343,10 @@ class InteractNet(nn.Module):
         super(InteractNet, self).__init__()
         self.extract = nn.Conv2d(in_chans, nc // 2, 1, 1, 0)
         self.lownet = LowNet(nc // 2, nc * 12)
-        self.highnet = HighNet(nc, upsample_scale)
+        if upsample_scale == 1:
+            self.highnet = HighNet_orig(nc)
+        else:
+            self.highnet = HighNet(nc, upsample_scale)
 
     def forward(self, x):
         x_f = self.extract(x)

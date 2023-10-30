@@ -6,12 +6,12 @@ import random
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 dataset_config = {
-    'lr_path': 'D:/Datasets/TEM-ImageNet-v1.3-master/image_NEAREST_128/',
+    'lr_path': 'D:/Datasets/TEM-ImageNet-v1.3-master/image/',
     'hr_path': 'D:/Datasets/TEM-ImageNet-v1.3-master/noBackgroundnoNoise/',
     'channel': 3,
     'train_split': 0.8,
-    'num_workers': 8,
-    'batchsize': 8,
+    'num_workers': 1,
+    'batchsize': 6,
     'shuffle': True,
 }
 
@@ -25,22 +25,22 @@ multiscale_aug_config = {
 }
 
 training_config = {
-    'task_name': 'denosing+debg+sr2x_uhdfour_3loss 5e-5 20epochs',
+    'task_name': 'denosing+debg_uhdfour_3loss 1e-4 new',
     'seed': 50,
     'epochs': 10,
-    'start_epoch': 19,
+    'start_epoch': 0,
     'model': 'uhdfour',
     'half_precision': False,
     'optim_config': {
         'name': 'Adam',
-        'lr': 2e-5,
+        'lr': 1e-4,
         'weight_decay': 0.001,
         'betas': (0.9, 0.999),
     },
     'scheduler_config': {
         'multiplier': 1,
-        'warmup_epoch': 1,
-        'eta_min': 1e-6,
+        'warmup_epoch': 3,
+        'eta_min': 1e-5,
     },
     'validation': {
         'enable': True,
@@ -50,6 +50,11 @@ training_config = {
         'enable': False,
         'unet_path': './weights/circularMask.pth',
         'loss_weight': 10,
+    },
+    'loss_weight': {
+        'l1': 5,
+        'ssim': 1,
+        'lpips': 1,
     },
     'save': {
         'enable': True,
@@ -85,6 +90,8 @@ dran_config = {
     'scale': 2,
     'n_colors': 3
 }
+
+
 
 
 
