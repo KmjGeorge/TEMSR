@@ -281,7 +281,6 @@ def deg(gt_img, noise='poisson-gaussian', thresh=0.8, compensation_range=[0., 0.
     if randomshuffle:
         seq = np.random.choice([1, 2, 3, 4], size=4, replace=False)
     else:
-<<<<<<< HEAD
         seq = [1, 2, 3, 4]
     for step in seq:
         if step == 1:
@@ -314,10 +313,8 @@ def deg(gt_img, noise='poisson-gaussian', thresh=0.8, compensation_range=[0., 0.
             else:
                 raise 'Error noise!'
         out = torch.clamp((out[:, 0, :, :].unsqueeze(1) * 255.0).round(), 0, 255) / 255.
-=======
         raise 'Error noise!'
 
->>>>>>> 6e778a4948d5fe98403f37972edfc68781d5e3bf
     return out, noise
 
 

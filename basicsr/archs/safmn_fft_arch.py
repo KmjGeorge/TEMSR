@@ -242,7 +242,7 @@ class FinalAdjust(nn.Module):
         return x
 
 
-# @ARCH_REGISTRY.register()
+@ARCH_REGISTRY.register()
 class SAFMN_FFT(nn.Module):
     def __init__(self, in_chans, dim, n_blocks=8, ffn_scale=2.0, upscaling_factor=4):
         super().__init__()

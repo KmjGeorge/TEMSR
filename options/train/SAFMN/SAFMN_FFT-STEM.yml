@@ -1,4 +1,4 @@
-name: SAFMN_FFT_STEM_p224_b8_newdeg
+name: SAFMN_FFT_STEM_p160_b8_newdeg
 model_type: RealTEMSRModel
 scale: 1
 num_gpu: 1
@@ -19,14 +19,14 @@ resize_range: [0.3, 1.5]
 # sigma_2_range: [!!float 1e-3, !!float 1e-2]
 randomshuffle: False
 
-gt_size: 224
+gt_size: 160
 queue_size: 256
 
 datasets:
   train:
     name: ReSe2
     type: RealTEMDataset
-    dataroot_gt: F:\Datasets\STEM ReSe2\ReSe2\all_GT
+    dataroot_gt: D:\Datasets\STEM ReSe2\ReSe2\all_GT
     # dataroot_lq: F:\Datasets\STEM ReSe2\ReSe2\paired\offset\LQ_crops 256 256 png
     meta_info: ~
 
@@ -43,25 +43,31 @@ datasets:
     betag_range: [ 0.5, 4 ]
     betap_range: [ 1, 2 ]
 
-    gt_size: 224
+    gt_size: 160
     use_hflip: true
     use_rot: true
 
     # data loader
-    num_worker_per_gpu: 6
+    num_worker_per_gpu: 1
     batch_size_per_gpu: 8
     dataset_enlarge_ratio: 20
     prefetch_mode: cuda
     pin_memory: true
 
   val:
-    name: ReSe2_deg
+    name: SimDeg
     type: PairedImageDataset
-    dataroot_gt: F:\Datasets\STEM ReSe2\ReSe2\paired\offset\GT_crops 256 256 png
-    dataroot_lq: F:\Datasets\STEM ReSe2\ReSe2\paired\offset\LQ_crops(deg from GT) 256 256 png
+    dataroot_gt: D:\Datasets\STEM ReSe2\ReSe2\paired\offset\GT_crops 256 256 png
+    dataroot_lq: D:\Datasets\STEM ReSe2\ReSe2\paired\offset\LQ_crops(deg from GT) 256 256 png
     io_backend:
       type: disk
-
+  val_2:
+    name: Real
+    type: PairedImageDataset
+    dataroot_gt: D:\Datasets\STEM ReSe2\ReSe2\paired\offset\GT_crops 256 256 png
+    dataroot_lq: D:\Datasets\STEM ReSe2\ReSe2\paired\offset\LQ_crops 256 256 png
+    io_backend:
+      type: disk
 
 network_g:
   type: SAFMN_FFT
