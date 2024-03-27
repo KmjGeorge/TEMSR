@@ -1,0 +1,77 @@
+name: NAFNet-width32_STEM_p256_b8_test
+model_type: RealTEMSRModel
+scale: 1
+num_gpu: 1
+manual_seed: 12345
+
+# ----------------- options for synthesizing training data in RealESRNetModel ----------------- #
+gt_usm: False  # USM the ground-truth
+
+adaptive_neighborhood_size: 7
+adaptive_threshold_range: [1, 2]
+compensation_range: [-0.1, 0]
+resize_prob: [0., 0., 1]  # up, down, keep
+resize_range: [0.3, 1.5]
+poisson_scale_range: [8, 12]
+gaussian_sigma_range: [5, 9]
+# sigma_1_range: [!!float 5e-3, !!float 5e-2]
+# sigma_2_range: [!!float 1e-3, !!float 1e-2]
+
+
+
+gt_size: 256
+queue_size: 256
+
+datasets:
+  val:
+    name: ReSe2_val
+    type: PairedImageDataset
+    dataroot_gt: F:/datasets/STEM ReSe2/ReSe2/paired/offset/GT_crops 256 256 png
+    dataroot_lq: F:/datasets/STEM ReSe2/ReSe2/paired/offset/LQ_crops 256 256 png
+    io_backend:
+      type: disk
+
+
+network_g:
+  type: NAFNet
+  width: 32
+  enc_blk_nums: [ 1, 1, 1, 8 ]
+  middle_blk_num: 1
+  dec_blk_nums: [ 1, 1, 1, 1 ]
+  img_channel: 1
+
+# path
+path:
+  pretrain_network_g: ~
+  strict_load_g: true
+  resume_state: ~
+
+
+val:
+ val_freq: !!float 1e4
+ save_img: true
+ suffix: ~
+ metrics:
+   psnr: # metric name
+     type: calculate_psnr
+     crop_border: 4
+     test_y_channel: false
+   ssim:
+     type: calculate_ssim
+     crop_border: 4
+     test_y_channel: false
+
+# logging settings
+logger:
+  print_freq: 1000
+  save_checkpoint_freq: !!float 1e4
+  use_tb_logger: true
+  wandb:
+    project: ~
+    resume_id: ~
+
+# dist training settings
+dist_params:
+  backend: nccl
+  port: 29500
+

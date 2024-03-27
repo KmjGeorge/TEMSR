@@ -1,0 +1,112 @@
+#### general settings
+name: 301_IRSDE_test
+model_type: DiffusionModel
+scale: 4
+num_gpu: 1  # set num_gpu: 0 for cpu mode
+manual_seed: 10
+
+sde:
+  max_sigma: 30
+  T: 100
+  schedule: cosine # linear, cosine
+  eps: 0.005
+  perform_ode: false
+
+#### datasets
+datasets:
+  train:
+    name: TEMImageNet_Train
+    type: PairedImageDataset
+    dataroot_gt: D:/Datasets/TEM-ImageNet-v1.3-master/noBackgroundnoNoise_diff/train
+    dataroot_lq: D:/Datasets/TEM-ImageNet-v1.3-master/image_bic64diff/train
+    filename_tmpl: '{}'
+    io_backend:
+      type: disk
+    color: gray
+    gt_size: 256
+    use_hflip: true
+    use_rot: true
+    num_worker_per_gpu: 1
+    batch_size_per_gpu: 2
+    dataset_enlarge_ratio: 1
+    prefetch_mode: ~
+
+  val:
+    name: TEMImageNet_Val
+    type: PairedImageDataset
+    dataroot_gt: D:/Datasets/TEM-ImageNet-v1.3-master/noBackgroundnoNoise_diff/val
+    dataroot_lq: D:/Datasets/TEM-ImageNet-v1.3-master/image_bic64diff/val
+    io_backend:
+      type: disk
+    color: gray
+
+
+#### network structures
+network_g:
+  type: ConditionalNAFNet
+  img_channel: 1
+  width: 64
+  enc_blk_nums: [1, 1, 1, 28]
+  middle_blk_num: 1
+  dec_blk_nums: [1, 1, 1, 1]
+
+#### path
+path:
+  pretrain_network_g: ~
+  strict_load_g: true
+  resume_state: ~
+  pretrain_network_l: ~
+
+#### training settings: learning rate scheme, loss
+train:
+  ema_decay: 0
+  optim_g:
+    type: Adam
+    lr: !!float 1e-4
+    weight_decay: 0
+    betas: [0.9, 0.99]
+
+  scheduler:
+    type: MultiStepLR
+    milestones: [180000]
+    gamma: 0.5
+
+  total_iter: 250000
+  warmup_iter: 3000
+
+  # losses
+  pixel_opt:
+    type: L1Loss
+    loss_weight: 1.0
+    reduction: mean
+
+# validation settings
+val:
+  val_freq: !!float 5e3
+  save_img: false
+
+  metrics:
+    psnr: # metric name, can be arbitrary
+      type: calculate_psnr
+      crop_border: 0
+      test_y_channel: false
+      better: higher
+    ssim:
+      type: calculate_ssim
+      crop_border: 0
+      test_y_channel: false
+      better: higher
+    niqe:
+      type: calculate_niqe
+      crop_border: 0
+      test_y_channel: false
+      better: lower
+
+# logging settings
+logger:
+  print_freq: 100
+  save_checkpoint_freq: !!float 5e3
+  use_tb_logger: true
+  wandb:
+    project: ~
+    resume_id: ~

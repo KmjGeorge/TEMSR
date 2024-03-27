@@ -1,0 +1,56 @@
+name: 101_RCANx2_scratch_TEMImageNet_bat8_inc3feature64group6block10_lr1e-4_test(ImageNet)
+suffix: ~  # add suffix to saved images
+model_type: SRModel
+scale: 2
+crop_border: ~  # crop border when evaluation. If None, crop the scale pixels
+num_gpu: 1  # set num_gpu: 0 for cpu mode
+manual_seed: 10
+
+datasets:
+  test_1:  # the 1st test dataset
+    name: TEMImageNet
+    type: PairedImageDataset
+    dataroot_gt: D:/datasets/TEM-ImageNet-v1.3-master/noBackgroundnoNoise/full
+    dataroot_lq: D:/datasets/TEM-ImageNet-v1.3-master/image_bic128/full
+    io_backend:
+      type: disk
+
+# network structures
+network_g:
+  type: RCAN
+  num_in_ch: 3
+  num_out_ch: 3
+  num_feat: 64
+  num_group: 6
+  num_block: 10
+  squeeze_factor: 16
+  upscale: 2
+  res_scale: 1
+  img_range: 255.
+  rgb_mean: [0.1980, 0.1980, 0.1980]
+
+val:
+  save_img: true
+  suffix: ~
+
+  metrics:
+    psnr: # metric name, can be arbitrary
+      type: calculate_psnr
+      crop_border: 0
+      test_y_channel: false
+      better: higher
+    ssim:
+      type: calculate_ssim
+      crop_border: 0
+      test_y_channel: false
+      better: higher
+    niqe:
+      type: calculate_niqe
+      crop_border: 0
+      test_y_channel: false
+      better: lower
+
+# path
+path:
+  pretrain_network_g: D:/github/TEMSR_BasicSR/experiments/pretrained_models/RCAN/101_RCANx2_scratch_TEMImageNet_bat8_inc3feature64group6block10_lr1e-4_240000.pth
+  strict_load_g: true
