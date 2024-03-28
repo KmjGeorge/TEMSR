@@ -1,3 +1,4 @@
+import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 import random
@@ -13,7 +14,7 @@ from basicsr.utils.registry import MODEL_REGISTRY
 from scripts.data_preparation.STEMdeg import adjust_contrast
 
 
-def adaptive_threshold(img_tensor, neighborhood_size=15, threshold_factor=1.5):
+def adaptive_luminance_adjust(img_tensor, neighborhood_size=15, threshold_factor=0.5):
     """
     Adaptive threshold brightness adjustment
 
@@ -31,7 +32,7 @@ def adaptive_threshold(img_tensor, neighborhood_size=15, threshold_factor=1.5):
     local_mean = F.avg_pool2d(img_tensor, kernel_size=neighborhood_size, stride=1,
                               padding=(neighborhood_size - 1) // 2)
 
-    result = torch.clamp(img_tensor - torch.abs(local_mean - img_tensor) * threshold_factor, 0, 1)
+    result = torch.clamp(img_tensor - local_mean * threshold_factor, 0, 1)
 
     return result
 
@@ -56,7 +57,7 @@ def linear_exposure_compensation(image_array, maxval, compensation_value):
     return adjusted_image
 
 
-def add_heteroscedastic_gnoise(image, device, sigma_1_range=(0.5, 0.05), sigma_2_range=(0.1, 0.01)):
+def add_heteroscedastic_gnoise(image, device, sigma_1_range=(0.05, 0.5), sigma_2_range=(0.01, 0.1)):
     """
     Adds heteroscedastic Gaussian noise to an image.
 
@@ -149,8 +150,8 @@ class RealTEMSRModel(SRModel):
             self.kernel = data['kernel'].to(self.device)
             ori_h, ori_w = self.gt.size()[2:4]
             # blur
-            out = filter2D(self.gt, self.kernel)
-
+            # out = filter2D(self.gt, self.kernel)
+            out = self.gt
             if self.opt['randomshuffle']:
                 seq = np.random.choice([1, 2, 3, 4], size=4, replace=False)
             else:
@@ -158,17 +159,17 @@ class RealTEMSRModel(SRModel):
 
             for step in seq:
                 if step == 1:
-                    # contrast adjustment
-                    threshold_factor = np.random.uniform(self.opt['adaptive_threshold_range'][0], self.opt['adaptive_threshold_range'][1])
-                    out = adaptive_threshold(out, neighborhood_size=self.opt['adaptive_neighborhood_size'],
-                                             threshold_factor=threshold_factor)
+                    # adaptive contrast adjustment
+                    thresh_factor = np.random.uniform(self.opt['threshold_factor_range'][0], self.opt['threshold_factor_range'][1])
+                    out = adaptive_luminance_adjust(out, self.opt['neighborhood_size'], thresh_factor)
+
+                    # contrast_factor = np.random.uniform(self.opt['contrast_range'][0], self.opt['contrast_range'][1])
+                    # out = adjust_contrast(out, contrast_factor=contrast_factor)
                 elif step == 2:
                     # exposure compensation
-                    compensation_value = np.random.uniform(self.opt['compensation_range'][0], self.opt['compensation_range'][1])
-                    contrast_factor = np.random.uniform(self.opt['contrast_range'][0], self.opt['contrast_range'][1])
+                    compensation_value = np.random.uniform(self.opt['compensation_range'][0],
+                                                           self.opt['compensation_range'][1])
                     out = linear_exposure_compensation(out, maxval=1., compensation_value=compensation_value)
-                    out = adjust_contrast(out, contrast_factor=contrast_factor)
-
                 elif step == 3:
                     # random resize
                     updown_type = random.choices(['up', 'down', 'keep'], self.opt['resize_prob'])[0]
@@ -183,36 +184,41 @@ class RealTEMSRModel(SRModel):
                     # out = torch.clamp((out * 255.0).round(), 0, 255) / 255.
 
                 elif step == 4:
-                    # add noise
-                    # 1. poisson noise
-                    out = random_add_poisson_noise_pt(
-                        out,
-                        scale_range=self.opt['poisson_scale_range'],
-                        gray_prob=1,
-                        clip=True,
-                        rounds=False)
-                    # 2. gaussian noise
-                    out = random_add_gaussian_noise_pt(
-                        out, sigma_range=self.opt['gaussian_sigma_range'], clip=True, rounds=False, gray_prob=1)
-
-
+                    # # add noise
+                    # # 1. poisson noise
+                    # out = random_add_poisson_noise_pt(
+                    #     out,
+                    #     scale_range=self.opt['poisson_scale_range'],
+                    #     gray_prob=1,
+                    #     clip=True,
+                    #     rounds=False)
+                    # # 2. gaussian noise
+                    # out = random_add_gaussian_noise_pt(
+                    #     out, sigma_range=self.opt['gaussian_sigma_range'], clip=True, rounds=False, gray_prob=1)
+                    out, _ = add_heteroscedastic_gnoise(out, device=self.device, sigma_1_range=self.opt['sigma_1_range'], sigma_2_range=self.opt['sigma_2_range'])
             self.lq = torch.clamp((out[:, 0, :, :].unsqueeze(1) * 255.0).round(), 0, 255) / 255.
 
             # random crop
             gt_size = self.opt['gt_size']
             self.gt, self.lq = paired_random_crop(self.gt, self.lq, gt_size, self.opt['scale'])
 
-            # for i in range(self.gt.shape[0]):
-            #     gt_img = self.gt.detach().cpu().numpy()[i].squeeze()
-            #     lq_img = self.lq.detach().cpu().numpy()[i].squeeze()
-            #     plt.subplot(121)
-            #     plt.title('gt')
-            #     plt.imshow(gt_img, 'gray')
-            #     plt.subplot(122)
-            #     plt.title('lq')
-            #     plt.imshow(lq_img, 'gray')
-            #     plt.show()
-            # assert False
+            '''
+            for i in range(self.gt.shape[0]):
+                gt_img = (self.gt.detach().cpu().numpy()[i].squeeze() * 255).astype(np.uint8)
+                lq_img = (self.lq.detach().cpu().numpy()[i].squeeze() * 255).astype(np.uint8)
+
+                cv2.imwrite('D:\github\TEMSR\experiments\\gt{}.png'.format(i), gt_img)
+                cv2.imwrite('D:\github\TEMSR\experiments\\lq{}.png'.format(i), lq_img)
+                # plt.subplot(121)
+                # plt.title('gt')
+                # plt.imshow(gt_img, 'gray')
+                # plt.subplot(122)
+                # plt.title('lq')
+                # plt.imshow(lq_img, 'gray')
+                # plt.show()
+            assert False
+            '''
+
 
             # training pair pool
             self._dequeue_and_enqueue()
@@ -230,5 +236,3 @@ class RealTEMSRModel(SRModel):
         self.is_train = False
         super(RealTEMSRModel, self).nondist_validation(dataloader, current_iter, tb_logger, save_img)
         self.is_train = True
-
-

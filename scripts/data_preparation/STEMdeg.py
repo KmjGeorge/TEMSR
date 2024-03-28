@@ -272,8 +272,18 @@ def add_heteroscedastic_gnoise(image, device, sigma_1_range=(5e-3, 5e-2), sigma_
     return torch.clamp(noisy_image, 0., 1.), noise
 
 
-def deg(gt_img, noise='poisson-gaussian', thresh=0.8, compensation_range=[0., 0.], contrast_range=[1., 1.], scale_range=[0., 1.],
-        sigma_range=[0., 1.], resize_prob=[0., 0., 1], resize_range=[0.3, 1.5], randomshuffle=False):
+def deg(gt_img, noise='poisson-gaussian',
+        compensation_range=[0., 0.],
+        neighborhood_size=15,
+        threshold_factor=0.5,
+        contrast_range=[1., 1.],
+        scale_range=[0., 1.],
+        sigma_range=[0., 1.],
+        resize_prob=[0., 0., 1],
+        resize_range=[0.3, 1.5],
+        sigma_1_range=[5e-3, 5e-2],
+        sigma_2_range=[1e-3, 1e-2],
+        randomshuffle=False):
     gt_img = gt_img / 255.0
     out = gt_img
     # out = adaptive_threshold(gt_img, neighborhood_size, threshold_factor)
@@ -285,11 +295,12 @@ def deg(gt_img, noise='poisson-gaussian', thresh=0.8, compensation_range=[0., 0.
     for step in seq:
         if step == 1:
             # out = luminance_threshold(out, threshold=thresh)
+            out = adaptive_threshold(out, neighborhood_size=neighborhood_size, threshold_factor=threshold_factor)
             compensation_value = np.random.uniform(compensation_range[0], compensation_range[1])
             out = linear_exposure_compensation(out, maxval=1, compensation_value=compensation_value)
-        elif step == 2:
-            contrast_factor = np.random.uniform(contrast_range[0], contrast_range[1])
-            out = adjust_contrast(out, contrast_factor=contrast_factor)
+        # elif step == 2:
+        #     contrast_factor = np.random.uniform(contrast_range[0], contrast_range[1])
+        #     out = adjust_contrast(out, contrast_factor=contrast_factor)
         elif step == 3:
             # random resize
             updown_type = random.choices(['up', 'down', 'keep'], resize_prob)[0]
@@ -307,13 +318,13 @@ def deg(gt_img, noise='poisson-gaussian', thresh=0.8, compensation_range=[0., 0.
                 out, noise2 = random_add_gaussian_noise_pt(
                     out, sigma_range=sigma_range, gray_prob=1)
             elif noise == 'heteroscedastic_gnoise':
-                out, noise = add_heteroscedastic_gnoise(out, device='cpu', sigma_1_range=(0.7, 0.7), sigma_2_range=(0.1, 0.1))
+                out, noise = add_heteroscedastic_gnoise(out, device='cpu', sigma_1_range=sigma_1_range,
+                                                        sigma_2_range=sigma_2_range)
             elif noise == 'nonoise':
                 noise = None
             else:
                 raise 'Error noise!'
         out = torch.clamp((out[:, 0, :, :].unsqueeze(1) * 255.0).round(), 0, 255) / 255.
-        raise 'Error noise!'
 
     return out, noise
 
@@ -385,7 +396,7 @@ def generate_degval(gt_path, save_lq_path):
         gt_img = cv2.imread(os.path.join(gt_path, filename), 0)
         gt_tensor = grayimg2tensor(gt_img)
         deg_gt, noise = deg(gt_tensor, noise='poisson-gaussian', thresh=1,
-                            compensation_range=[0.7, 0.9],
+                            compensation_range=[-0.1, 0],
                             contrast_range=[0.4, 0.6],
                             scale_range=[4, 8],
                             sigma_range=[1, 5],
@@ -395,46 +406,65 @@ def generate_degval(gt_path, save_lq_path):
         cv2.imwrite(os.path.join(save_lq_path, filename), deg_gt_img)
     print('Done!')
 
+
 if __name__ == '__main__':
     from tqdm import tqdm
 
-    generate_degval('F:\Datasets\TEM-ImageNet-v1.3-master\\noBackgroundnoNoise\\val',
-                    'F:\Datasets\TEM-ImageNet-v1.3-master\\rese2 deg_test')
-
     '''
-    # search 
-    compensation_values = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]
+    generate_degval('D:\Datasets\STEM ReSe2\ReSe2\\all_GT',
+                    'D:\Datasets\STEM ReSe2\ReSe2\\all_GT_degtest')
+    '''
+
+    gt_img = cv2.imread('D:\Datasets\STEM ReSe2\ReSe2\paired\offset\GT_crops 256 256 png\\2219_x19y2_s001.png', 0)
+    lq_img = cv2.imread('D:\Datasets\STEM ReSe2\ReSe2\paired\offset\LQ_crops 256 256 png\\2219_x19y2_s001.png', 0)
+    gt_tensor, lq_tensor = grayimg2tensor(gt_img), grayimg2tensor(lq_img)
+    # hyper search
+    layer_weights = {'conv5_4': 1}
+    vgg = VGGFeatureExtractor(
+        layer_name_list=list(layer_weights.keys()),
+        vgg_type='vgg19',
+        use_input_norm=True,
+        range_norm=False)
+    compensation_values = np.arange(-0.1, 0.1, 0.02)
     contrast_factors = [0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.1, 1.2, 1.3, 1.4, 1.5]
     scale_ranges = [3, 4, 5, 6, 7, 8, 9, 10]
     sigma_ranges = [1, 2, 3, 4, 5, 6]
-    max_iters = 5000
-    best_cx = 100000
-    best_mean = 100000
-    best_std = 100000
+    neighborhood_sizes = [7, 9, 11, 13, 15, 17, 19, 21]
+    thresh_factors = np.arange(0.3, 0.7, 0.1)
+    sigma_1_ranges = [],
+    sigma_2_ranges = []
+    hetero_sigma1 = np.arange(0.05, 0.5, 0.02)
+    hetero_sigma2 = np.arange(0.01, 0.1, 0.01)
+    max_iters = 10000
+    best_cx = 99999999
+    best_mean = 99999999
+    best_std = 99999999
     best_param_cx = [1, 2, 3, 4]
     best_param_mean = [1, 2, 3, 4]
     best_param_std = [1, 2, 3, 4]
-    with open('deg param search log.txt', 'w') as f:
+    with open('D:\github\TEMSR\experiments\\hyper_log.txt', 'w') as f:
         for iter in tqdm(range(max_iters)):
             compensation_value = np.random.choice(compensation_values)
-            contrast_factor = np.random.choice(contrast_factors)
-            scale_range = np.random.choice(scale_ranges)
-            sigma_range = np.random.choice(sigma_ranges)
-
-            deg_gt, noise = deg(gt_tensor, noise='poisson-gaussian', thresh=1,
-                                compensation_value=compensation_value,
-                                contrast_factor=contrast_factor,
-                                scale_range=[scale_range, scale_range],
-                                sigma_range=[sigma_range, sigma_range])
-
+            # contrast_factor = np.random.choice(contrast_factors)
+            # scale_range = np.random.choice(scale_ranges)
+            # sigma_range = np.random.choice(sigma_ranges)
+            sigma1_range = np.random.choice(hetero_sigma1).round(3)
+            sigma2_range = np.random.choice(hetero_sigma2).round(3)
+            neighborhood_size = np.random.choice(neighborhood_sizes)
+            thresh_factor = np.random.choice(thresh_factors)
+            deg_gt, noise = deg(gt_tensor, noise='heteroscedastic_gnoise',
+                                neighborhood_size=neighborhood_size,
+                                threshold_factor=thresh_factor,
+                                compensation_range=[compensation_value, compensation_value],
+                                sigma_1_range=[sigma1_range, sigma1_range],
+                                sigma_2_range=[sigma2_range, sigma2_range]
+                                )
             deg_gt_img = tensor2inp(deg_gt)
-           
 
             cx_loss = caculate_cxloss(vgg, deg_gt, lq_tensor)
             mean_dis = math.fabs(lq_img.mean() - deg_gt_img.mean())
             std_dis = math.fabs(lq_img.std() - deg_gt_img.std())
-            f.write(str(compensation_value) + ' ' + str(contrast_factor) + ' ' + str(
-                scale_range) + ' ' + str(sigma_range) + ' ====> ')
+            f.write(str(neighborhood_size) + ' ' + str(thresh_factor) + ' ' + str(compensation_value) + ' ' + str(sigma1_range) +' ' + str(sigma2_range) + ' ====> ')
             f.write('cx_loss = ' + str(cx_loss) + ' ' + 'mean_dis = ' + str(mean_dis) + ' ' + 'std_dis = ' + str(
                 std_dis) + ' ')
             # print(compensation_value, contrast_factor, scale_range, sigma_range, end=' ====> ')
@@ -443,17 +473,17 @@ if __name__ == '__main__':
             # print('std_dis =', std_dis, end=' ')
             if cx_loss < best_cx:
                 best_cx = cx_loss
-                best_param_cx = [compensation_value, contrast_factor, scale_range, sigma_range]
+                best_param_cx = [neighborhood_size, thresh_factor, compensation_value, sigma1_range, sigma2_range]
                 f.write('Best CX! ')
                 # print('Best CX!', end=' ')
             if mean_dis < best_mean:
                 best_mean = mean_dis
-                best_param_mean = [compensation_value, contrast_factor, scale_range, sigma_range]
+                best_param_mean = [neighborhood_size, thresh_factor, compensation_value, sigma1_range, sigma2_range]
                 f.write('Best Mean! ')
                 # print('Best Mean!', end=' ')
             if std_dis < best_std:
                 best_std = std_dis
-                best_param_std = [compensation_value, contrast_factor, scale_range, sigma_range]
+                best_param_std = [neighborhood_size, thresh_factor, compensation_value, sigma1_range, sigma2_range]
                 f.write('Best Std! ')
                 # print('Best Std!', end=' ')
             # print(' ')
@@ -466,7 +496,6 @@ if __name__ == '__main__':
         print(best_mean, best_std, best_cx)
         print('Best Params for Mean Std Cx', end='  =======>  ')
         print(best_param_mean, best_param_std, best_param_cx)
-    '''
 
     '''
     from tqdm import tqdm
