@@ -1,0 +1,120 @@
+name: SAFMN_FFT_STEM(from sim)_p128b16_blur0.2ct46com36poi48g15j5
+model_type: RealTEMSRSimModel
+scale: 1
+num_gpu: 1
+manual_seed: 12345
+
+# ----------------- options for synthesizing training data in RealESRNetModel ----------------- #
+gt_usm: False  # USM the ground-truth
+
+blur_prob: 0.2
+contrast_range: [0.4, 0.6]
+compensation_range: [0.3, 0.6]
+poisson_scale_range: [4, 8]
+gaussian_sigma_range: [1, 5]
+sigma_jitter: 5
+resize_prob: [0., 0., 1]  # up, down, keep
+resize_range: [0.3, 1.5]
+randomshuffle: False
+
+gt_size: 128
+queue_size: 256
+
+datasets:
+  train:
+    name: ReSe2_Sim
+    type: RealTEMDataset
+    dataroot_gt: D:\Datasets\Sim ReSe2\crops
+    meta_info: ~
+
+    filename_tmpl: '{}'
+    io_backend:
+      type: disk
+
+    blur_prob: 0
+    blur_kernel_size: 21
+    kernel_list: [ 'iso', 'aniso', 'generalized_iso', 'generalized_aniso', 'plateau_iso', 'plateau_aniso' ]
+    kernel_prob: [ 0.45, 0.25, 0.12, 0.03, 0.12, 0.03 ]
+    sinc_prob: 0
+    blur_sigma: [ 0.2, 3 ]
+    betag_range: [ 0.5, 4 ]
+    betap_range: [ 1, 2 ]
+
+    gt_size: 128
+    use_hflip: true
+    use_rot: true
+
+    # data loader
+    num_worker_per_gpu: 1
+    batch_size_per_gpu: 16
+    dataset_enlarge_ratio: 100
+    prefetch_mode: cuda
+    pin_memory: true
+
+network_g:
+  type: SAFMN_FFT
+  in_chans: 1
+  dim: 36
+  n_blocks: 12
+  ffn_scale: 2.0
+  upscaling_factor: 1
+
+# path
+path:
+  pretrain_network_g: ~
+  strict_load_g: true
+  resume_state: ~
+
+# training settings
+train:
+  optim_g:
+    type: AdamW
+    lr: !!float 1e-4
+    weight_decay: 0.
+    betas: [0.9, 0.99]
+
+  scheduler:
+    type: CosineAnnealingRestartLR
+    periods: [100000]
+    restart_weights: [1]
+    eta_min: !!float 1e-6
+  total_iter: 100000
+  warmup_iter: -1
+
+  # losses
+  pixel_opt:
+    type: L1Loss
+    loss_weight: 1.0
+    reduction: mean
+  fft_opt:
+    type: FFTLoss
+    loss_weight: 0.05
+    reduction: mean
+
+val:
+ val_freq: !!float 1e4
+ save_img: true
+ metrics:
+   psnr: # metric name
+     type: calculate_psnr
+     crop_border: 0
+     test_y_channel: false
+   ssim:
+     type: calculate_ssim
+     crop_border: 0
+     test_y_channel: false
+
+# logging settings
+logger:
+  print_freq: 1000
+  save_checkpoint_freq: !!float 1e4
+  use_tb_logger: true
+  wandb:
+    project: ~
+    resume_id: ~
+
+# dist training settings
+dist_params:
+  backend: nccl
+  port: 29500
+

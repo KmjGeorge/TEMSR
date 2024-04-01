@@ -14,29 +14,6 @@ from basicsr.utils.registry import MODEL_REGISTRY
 from scripts.data_preparation.STEMdeg import adjust_contrast
 
 
-def adaptive_luminance_adjust(img_tensor, neighborhood_size=15, threshold_factor=0.5):
-    """
-    Adaptive threshold brightness adjustment
-
-    Params:
-    - image: input tensor for (C, H, W)
-    - k: 用于调整局部阈值的系数。
-    - block_size: 局部区域的大小，用于计算局部阈值。
-
-    Returns:
-    - adjusted image tensor。
-    """
-    # 计算局部平均值和标准差
-    # 计算局部均值
-    # 计算局部均值
-    local_mean = F.avg_pool2d(img_tensor, kernel_size=neighborhood_size, stride=1,
-                              padding=(neighborhood_size - 1) // 2)
-
-    result = torch.clamp(img_tensor - local_mean * threshold_factor, 0, 1)
-
-    return result
-
-
 def linear_exposure_compensation(image_array, maxval, compensation_value):
     # 确保补偿值在合理的范围内
     compensation_value = max(-1, min(1, compensation_value))
@@ -88,8 +65,22 @@ def add_heteroscedastic_gnoise(image, device, sigma_1_range=(0.05, 0.5), sigma_2
     return torch.clamp(noisy_image, 0., 1.), noise
 
 
+def add_scan_noise(img, sigma_jitter=0.2, phi=np.pi / 4, f=1 / 200):
+    _, _, h, w = img.shape
+    img_new = torch.zeros_like(img)
+    for i in range(h):
+        delta_x = int((np.random.normal() * sigma_jitter * np.sin(2 * np.pi * f * i)).round())
+        for j in range(w):
+            delta_y = int((np.random.normal() * sigma_jitter * np.sin(2 * np.pi * f * j + phi)).round())
+            try:
+                img_new[:, :, i, j] = img[:, :, i - delta_x, j - delta_y]
+            except:
+                img_new[:, :, i, j] = img[:, :, i, j]
+    return img_new
+
+
 @MODEL_REGISTRY.register()
-class RealTEMSRModel(SRModel):
+class RealTEMSRSimModel(SRModel):
     """RealESRNet Model for Real-ESRGAN: Training Real-World Blind Super-Resolution with Pure Synthetic Data.
 
     It is trained without GAN losses.
@@ -99,7 +90,7 @@ class RealTEMSRModel(SRModel):
     """
 
     def __init__(self, opt):
-        super(RealTEMSRModel, self).__init__(opt)
+        super(RealTEMSRSimModel, self).__init__(opt)
         self.queue_size = opt.get('queue_size', 180)
 
     @torch.no_grad()
@@ -149,16 +140,18 @@ class RealTEMSRModel(SRModel):
             self.gt = data['gt'].to(self.device)
             self.kernel = data['kernel'].to(self.device)
             ori_h, ori_w = self.gt.size()[2:4]
-            # blur
-            # out = filter2D(self.gt, self.kernel)
+
             out = self.gt
             if self.opt['randomshuffle']:
-                seq = np.random.choice([1, 2, 3, 4], size=4, replace=False)
+                seq = np.random.choice([1, 2, 3, 4, 5, 6], size=6, replace=False)
             else:
-                seq = [1, 2, 3, 4]
+                seq = [1, 2, 3, 4, 5, 6]
 
             for step in seq:
                 if step == 1:
+                    if np.random.uniform() < self.opt['blur_prob']:
+                        out = filter2D(self.gt, self.kernel)
+                elif step == 2:
                     # adaptive luminance adjustment
                     # thresh_factor = np.random.uniform(self.opt['threshold_factor_range'][0],
                     #                                   self.opt['threshold_factor_range'][1])
@@ -166,12 +159,12 @@ class RealTEMSRModel(SRModel):
                     # global contrast adjustment
                     contrast_factor = np.random.uniform(self.opt['contrast_range'][0], self.opt['contrast_range'][1])
                     out = adjust_contrast(out, contrast_factor=contrast_factor)
-                elif step == 2:
+                elif step == 3:
                     # exposure compensation
                     compensation_value = np.random.uniform(self.opt['compensation_range'][0],
                                                            self.opt['compensation_range'][1])
                     out = linear_exposure_compensation(out, maxval=1., compensation_value=compensation_value)
-                elif step == 3:
+                elif step == 4:
                     # random resize
                     updown_type = random.choices(['up', 'down', 'keep'], self.opt['resize_prob'])[0]
                     if updown_type == 'up':
@@ -186,8 +179,7 @@ class RealTEMSRModel(SRModel):
                     mode = random.choice(['area', 'bilinear', 'bicubic'])
                     out = F.interpolate(out, size=(ori_h // self.opt['scale'], ori_w // self.opt['scale']), mode=mode)
                     # out = torch.clamp((out * 255.0).round(), 0, 255) / 255.
-
-                elif step == 4:
+                elif step == 5:
                     # add noise
                     # 1. poisson noise
                     out = random_add_poisson_noise_pt(
@@ -199,9 +191,9 @@ class RealTEMSRModel(SRModel):
                     # 2. gaussian noise
                     out = random_add_gaussian_noise_pt(
                         out, sigma_range=self.opt['gaussian_sigma_range'], clip=True, rounds=False, gray_prob=1)
-                    # out, _ = add_heteroscedastic_gnoise(out, device=self.device,
-                    #                                     sigma_1_range=self.opt['sigma_1_range'],
-                    #                                     sigma_2_range=self.opt['sigma_2_range'])
+                elif step == 6:
+                    out = add_scan_noise(out, self.opt['sigma_jitter'], phi=np.pi / 2)
+
             self.lq = torch.clamp((out[:, 0, :, :].unsqueeze(1) * 255.0).round(), 0, 255) / 255.
 
             # random crop
@@ -239,5 +231,5 @@ class RealTEMSRModel(SRModel):
     def nondist_validation(self, dataloader, current_iter, tb_logger, save_img):
         # do not use the synthetic process during validation
         self.is_train = False
-        super(RealTEMSRModel, self).nondist_validation(dataloader, current_iter, tb_logger, save_img)
+        super(RealTEMSRSimModel, self).nondist_validation(dataloader, current_iter, tb_logger, save_img)
         self.is_train = True

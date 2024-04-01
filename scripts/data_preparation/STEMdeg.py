@@ -14,7 +14,10 @@ from basicsr.archs.vgg_arch import VGGFeatureExtractor
 import torch.nn.functional as F
 import torch
 from PIL import Image
+
+from basicsr.data.degradations import circular_lowpass_kernel, random_mixed_kernels
 from basicsr.losses.cxloss import symetric_CX_loss
+from basicsr.utils.img_process_util import filter2D
 
 
 def setup_seed(seed):
@@ -333,6 +336,108 @@ def deg(gt_img, noise='poisson-gaussian',
     return out, noise
 
 
+def generate_kernel(kernel_range=[2 * v + 1 for v in range(3, 7)], sinc_prob=0.,
+                    kernel_list=['iso', 'aniso', 'generalized_iso', 'generalized_aniso', 'plateau_iso',
+                                 'plateau_aniso'],
+                    kernel_prob=[0.45, 0.25, 0.12, 0.03, 0.12, 0.03],
+                    blur_sigma=[0.1, 1],
+                    betag_range=[0.1, 1],
+                    betap_range=[0.1, 1]):
+    kernel_size = random.choice(kernel_range)
+    if np.random.uniform() < sinc_prob:
+        # this sinc filter setting is for kernels ranging from [7, 21]
+        if kernel_size < 13:
+            omega_c = np.random.uniform(np.pi / 3, np.pi)
+        else:
+            omega_c = np.random.uniform(np.pi / 5, np.pi)
+        kernel = circular_lowpass_kernel(omega_c, kernel_size, pad_to=False)
+    else:
+        kernel = random_mixed_kernels(
+            kernel_list,
+            kernel_prob,
+            kernel_size,
+            blur_sigma,
+            blur_sigma, [-math.pi, math.pi],
+            betag_range,
+            betap_range,
+            noise_range=None)
+    # pad kernel
+    pad_size = (21 - kernel_size) // 2
+    kernel = np.pad(kernel, ((pad_size, pad_size), (pad_size, pad_size)))
+    kernel = torch.FloatTensor(kernel)
+    return kernel
+
+
+def deg_from_sim(gt_img, noise='poisson-gaussian',
+                 use_blur=False,
+                 compensation_range=[0., 0.],
+                 contrast_range=[1., 1.],
+                 scale_range=[0., 1.],
+                 sigma_range=[0., 1.],
+                 resize_prob=[0., 0., 1],
+                 resize_range=[0.3, 1.5],
+                 sigma_1_range=[5e-3, 5e-2],
+                 sigma_2_range=[1e-3, 1e-2],
+                 sigma_jitter=5,
+                 randomshuffle=False):
+    gt_img = gt_img / 255.0
+    out = gt_img
+    orig_h, orig_w = gt_img.size()[2:4]
+    # out = adaptive_threshold(gt_img, neighborhood_size, threshold_factor)
+    # gt_noisy, noise = add_natural_noise(gt_img_tensor, use_cuda=False)
+    if randomshuffle:
+        if use_blur:
+            seq = np.random.choice([1, 2, 3, 4, 5, 6], size=6, replace=False)
+        else:
+            seq = np.random.choice([2, 3, 4, 5, 6], size=5, replace=False)
+    else:
+        if use_blur:
+            seq = [1, 2, 3, 4, 5, 6]
+        else:
+            seq = [2, 3, 4, 5, 6]
+    for step in seq:
+        if step == 1:
+            kernel = generate_kernel()
+            out = filter2D(out, kernel)
+        if step == 2:
+            contrast_factor = np.random.uniform(contrast_range[0], contrast_range[1])
+            out = adjust_contrast(out, contrast_factor=contrast_factor)
+        elif step == 3:
+            compensation_factor = np.random.uniform(compensation_range[0], compensation_range[1])
+            out = linear_exposure_compensation(out, 1, compensation_factor)
+        elif step == 4:
+            # random resize
+            updown_type = random.choices(['up', 'down', 'keep'], resize_prob)[0]
+            if updown_type == 'up':
+                scale = np.random.uniform(1, resize_range[1])
+            elif updown_type == 'down':
+                scale = np.random.uniform(resize_range[0], 1)
+            else:
+                scale = 1
+            mode = random.choice(['area', 'bilinear', 'bicubic'])
+            out = F.interpolate(out, scale_factor=scale, mode=mode)
+            # resize back
+            mode = random.choice(['area', 'bilinear', 'bicubic'])
+            out = F.interpolate(out, size=(orig_h, orig_w), mode=mode)
+        elif step == 5:
+            if noise == 'poisson-gaussian':
+                out, noise1 = random_add_poisson_noise_pt(out, scale_range=scale_range, gray_prob=1)  # poisson noise
+                out, noise2 = random_add_gaussian_noise_pt(
+                    out, sigma_range=sigma_range, gray_prob=1)
+            elif noise == 'heteroscedastic_gnoise':
+                out, noise = add_heteroscedastic_gnoise(out, device='cpu', sigma_1_range=sigma_1_range,
+                                                        sigma_2_range=sigma_2_range)
+            elif noise == 'nonoise':
+                noise = None
+            else:
+                raise 'Error noise!'
+        elif step == 6:
+            out = add_scan_noise(out, sigma_jitter, phi=np.pi / 2)
+        out = torch.clamp((out[:, 0, :, :].unsqueeze(1) * 255.0).round(), 0, 255) / 255.
+
+    return out, noise
+
+
 def grayimg2tensor(gray):
     gray = torch.from_numpy(gray)
     gray = gray.unsqueeze(0).unsqueeze(0)
@@ -411,12 +516,47 @@ def generate_degval(gt_path, save_lq_path):
     print('Done!')
 
 
+def add_scan_noise(img, sigma_jitter=0.2, phi=np.pi / 4, f=1 / 200):
+    h, w = img.shape[2], img.shape[3]
+    img_pix = img.squeeze()
+    img_new = torch.zeros(size=(h, w))
+    for i in range(h):
+        delta_x = int((np.random.normal() * sigma_jitter * np.sin(2 * np.pi * f * i)).round())
+        for j in range(w):
+            delta_y = int((np.random.normal() * sigma_jitter * np.sin(2 * np.pi * f * j + phi)).round())
+            try:
+                img_new[i][j] = img_pix[i - delta_x][j - delta_y]
+            except:
+                img_new[i][j] = img_pix[i][j]
+    img_new = img_new.unsqueeze(0).unsqueeze(0)
+    return img_new
+
+
 if __name__ == '__main__':
     from tqdm import tqdm
 
+    img_sim = cv2.imread('D:\Datasets\Sim ReSe2\Param1\\1.5_0.8_0_0_35.0_0.6_1011.png', 0)
+    img_sim_pt = grayimg2tensor(img_sim)
+    img_deg_pt, _ = deg_from_sim(img_sim_pt,
+                                 use_blur=False,
+                                 compensation_range=[-0.1, 0.1],
+                                 contrast_range=[0.4, 0.8],
+                                 resize_prob=[0.2, 0.7, 0.1],
+                                 resize_range=[0.3, 1.5],
+                                 scale_range=[2, 7],
+                                 sigma_range=[1, 5])
+    img_deg = tensor2inp(img_deg_pt)
+    cv2.imwrite('D:\Datasets\Sim ReSe2\Param1\\1.5_0.8_0_0_35.0_0.6_1011_fulldeg.png', img_deg)
+
+    # plt.imshow(img_deg, 'gray')
+    # plt.savefig()
+    # plt.show()
+    #
+    '''
     # generate deg set for validation
     generate_degval('D:\Datasets\STEM ReSe2\ReSe2\paired\offset\GT_crops 256 256 png',
                     'D:\Datasets\STEM ReSe2\ReSe2\paired\offset\LQ_crops(deg from GT) 256 256 png')
+    '''
 
     '''
     gt_img = cv2.imread('D:\Datasets\STEM ReSe2\ReSe2\paired\offset\GT_crops 256 256 png\\2219_x19y2_s001.png', 0)
