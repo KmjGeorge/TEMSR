@@ -275,7 +275,7 @@ def add_heteroscedastic_gnoise(image, device, sigma_1_range=(5e-3, 5e-2), sigma_
 def deg(gt_img, noise='poisson-gaussian',
         compensation_range=[0., 0.],
         neighborhood_size=15,
-        threshold_factor=0.5,
+        threshold_factor_range=[0.4, 0.6],
         contrast_range=[1., 1.],
         scale_range=[0., 1.],
         sigma_range=[0., 1.],
@@ -294,13 +294,17 @@ def deg(gt_img, noise='poisson-gaussian',
         seq = [1, 2, 3, 4]
     for step in seq:
         if step == 1:
-            # out = luminance_threshold(out, threshold=thresh)
+            '''
+            threshold_factor = np.random.uniform(threshold_factor_range[0], threshold_factor_range[1])
             out = adaptive_threshold(out, neighborhood_size=neighborhood_size, threshold_factor=threshold_factor)
             compensation_value = np.random.uniform(compensation_range[0], compensation_range[1])
             out = linear_exposure_compensation(out, maxval=1, compensation_value=compensation_value)
-        # elif step == 2:
-        #     contrast_factor = np.random.uniform(contrast_range[0], contrast_range[1])
-        #     out = adjust_contrast(out, contrast_factor=contrast_factor)
+            '''
+            contrast_factor = np.random.uniform(contrast_range[0], contrast_range[1])
+            out = adjust_contrast(out, contrast_factor=contrast_factor)
+        elif step == 2:
+            compensation_factor = np.random.uniform(compensation_range[0], compensation_range[1])
+            out = linear_exposure_compensation(out, 1, compensation_factor)
         elif step == 3:
             # random resize
             updown_type = random.choices(['up', 'down', 'keep'], resize_prob)[0]
@@ -395,9 +399,9 @@ def generate_degval(gt_path, save_lq_path):
     for filename in tqdm(os.listdir(gt_path)):
         gt_img = cv2.imread(os.path.join(gt_path, filename), 0)
         gt_tensor = grayimg2tensor(gt_img)
-        deg_gt, noise = deg(gt_tensor, noise='poisson-gaussian', thresh=1,
-                            compensation_range=[-0.1, 0],
+        deg_gt, noise = deg(gt_tensor, noise='poisson-gaussian',
                             contrast_range=[0.4, 0.6],
+                            compensation_range=[0.3, 0.6],
                             scale_range=[4, 8],
                             sigma_range=[1, 5],
                             randomshuffle=False)
@@ -410,11 +414,11 @@ def generate_degval(gt_path, save_lq_path):
 if __name__ == '__main__':
     from tqdm import tqdm
 
-    '''
-    generate_degval('D:\Datasets\STEM ReSe2\ReSe2\\all_GT',
-                    'D:\Datasets\STEM ReSe2\ReSe2\\all_GT_degtest')
-    '''
+    # generate deg set for validation
+    generate_degval('D:\Datasets\STEM ReSe2\ReSe2\paired\offset\GT_crops 256 256 png',
+                    'D:\Datasets\STEM ReSe2\ReSe2\paired\offset\LQ_crops(deg from GT) 256 256 png')
 
+    '''
     gt_img = cv2.imread('D:\Datasets\STEM ReSe2\ReSe2\paired\offset\GT_crops 256 256 png\\2219_x19y2_s001.png', 0)
     lq_img = cv2.imread('D:\Datasets\STEM ReSe2\ReSe2\paired\offset\LQ_crops 256 256 png\\2219_x19y2_s001.png', 0)
     gt_tensor, lq_tensor = grayimg2tensor(gt_img), grayimg2tensor(lq_img)
@@ -496,6 +500,7 @@ if __name__ == '__main__':
         print(best_mean, best_std, best_cx)
         print('Best Params for Mean Std Cx', end='  =======>  ')
         print(best_param_mean, best_param_std, best_param_cx)
+    '''
 
     '''
     from tqdm import tqdm

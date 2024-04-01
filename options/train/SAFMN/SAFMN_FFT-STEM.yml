@@ -1,4 +1,4 @@
-name: SAFMN_FFT_STEM_p224b4_randshuffle
+name: SAFMN_FFT_STEM_p84b32_ct46com36poi48g15
 model_type: RealTEMSRModel
 scale: 1
 num_gpu: 1
@@ -9,19 +9,19 @@ gt_usm: False  # USM the ground-truth
 
 
 contrast_range: [0.4, 0.6]
-poisson_scale_range: [0, 0] # [4, 6]
-gaussian_sigma_range: [1, 4]
-neighborhood_size: 15
-threshold_factor_range: [0.4, 0.6]
-compensation_range: [-0.1, 0.1]
+poisson_scale_range: [4, 8]
+gaussian_sigma_range: [1, 5]
+#neighborhood_size: 15
+#threshold_factor_range: [0.4, 0.6]
+compensation_range: [0.3, 0.6]
 resize_prob: [0., 0., 1]  # up, down, keep
 resize_range: [0.3, 1.5]
-sigma_1_range: [!!float 5e-2, !!float 5e-1]
-sigma_2_range: [!!float 1e-2, !!float 1e-1]
-randomshuffle: True
+#sigma_1_range: [!!float 5e-2, !!float 5e-1]
+#sigma_2_range: [!!float 1e-2, !!float 1e-1]
+randomshuffle: False
 
-gt_size: 224
-queue_size: 180
+gt_size: 84
+queue_size: 256
 
 datasets:
   train:
@@ -44,14 +44,14 @@ datasets:
     betag_range: [ 0.5, 4 ]
     betap_range: [ 1, 2 ]
 
-    gt_size: 224
+    gt_size: 84
     use_hflip: true
     use_rot: true
 
     # data loader
-    num_worker_per_gpu: 1
-    batch_size_per_gpu: 4
-    dataset_enlarge_ratio: 10
+    num_worker_per_gpu: 8
+    batch_size_per_gpu: 32
+    dataset_enlarge_ratio: 100
     prefetch_mode: cuda
     pin_memory: true
 
@@ -62,13 +62,13 @@ datasets:
     dataroot_lq: D:\Datasets\STEM ReSe2\ReSe2\paired\offset\LQ_crops(deg from GT) 256 256 png
     io_backend:
       type: disk
-  val_2:
-    name: Real
-    type: PairedImageDataset
-    dataroot_gt: D:\Datasets\STEM ReSe2\ReSe2\paired\offset\GT_crops 256 256 png
-    dataroot_lq: D:\Datasets\STEM ReSe2\ReSe2\paired\offset\LQ_crops 256 256 png
-    io_backend:
-      type: disk
+#  val_2:
+#    name: Real
+#    type: PairedImageDataset
+#    dataroot_gt: D:\Datasets\STEM ReSe2\ReSe2\paired\offset\GT_crops 256 256 png
+#    dataroot_lq: D:\Datasets\STEM ReSe2\ReSe2\paired\offset\LQ_crops 256 256 png
+#    io_backend:
+#      type: disk
 
 network_g:
   type: SAFMN_FFT
@@ -94,10 +94,10 @@ train:
 
   scheduler:
     type: CosineAnnealingRestartLR
-    periods: [200000]
+    periods: [300000]
     restart_weights: [1]
     eta_min: !!float 1e-6
-  total_iter: 200000
+  total_iter: 300000
   warmup_iter: -1
 
   # losses

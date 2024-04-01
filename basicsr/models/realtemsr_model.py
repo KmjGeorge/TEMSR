@@ -159,12 +159,13 @@ class RealTEMSRModel(SRModel):
 
             for step in seq:
                 if step == 1:
-                    # adaptive contrast adjustment
-                    thresh_factor = np.random.uniform(self.opt['threshold_factor_range'][0], self.opt['threshold_factor_range'][1])
-                    out = adaptive_luminance_adjust(out, self.opt['neighborhood_size'], thresh_factor)
-
-                    # contrast_factor = np.random.uniform(self.opt['contrast_range'][0], self.opt['contrast_range'][1])
-                    # out = adjust_contrast(out, contrast_factor=contrast_factor)
+                    # adaptive luminance adjustment
+                    # thresh_factor = np.random.uniform(self.opt['threshold_factor_range'][0],
+                    #                                   self.opt['threshold_factor_range'][1])
+                    # out = adaptive_luminance_adjust(out, self.opt['neighborhood_size'], thresh_factor)
+                    # global contrast adjustment
+                    contrast_factor = np.random.uniform(self.opt['contrast_range'][0], self.opt['contrast_range'][1])
+                    out = adjust_contrast(out, contrast_factor=contrast_factor)
                 elif step == 2:
                     # exposure compensation
                     compensation_value = np.random.uniform(self.opt['compensation_range'][0],
@@ -184,18 +185,20 @@ class RealTEMSRModel(SRModel):
                     # out = torch.clamp((out * 255.0).round(), 0, 255) / 255.
 
                 elif step == 4:
-                    # # add noise
-                    # # 1. poisson noise
-                    # out = random_add_poisson_noise_pt(
-                    #     out,
-                    #     scale_range=self.opt['poisson_scale_range'],
-                    #     gray_prob=1,
-                    #     clip=True,
-                    #     rounds=False)
-                    # # 2. gaussian noise
-                    # out = random_add_gaussian_noise_pt(
-                    #     out, sigma_range=self.opt['gaussian_sigma_range'], clip=True, rounds=False, gray_prob=1)
-                    out, _ = add_heteroscedastic_gnoise(out, device=self.device, sigma_1_range=self.opt['sigma_1_range'], sigma_2_range=self.opt['sigma_2_range'])
+                    # add noise
+                    # 1. poisson noise
+                    out = random_add_poisson_noise_pt(
+                        out,
+                        scale_range=self.opt['poisson_scale_range'],
+                        gray_prob=1,
+                        clip=True,
+                        rounds=False)
+                    # 2. gaussian noise
+                    out = random_add_gaussian_noise_pt(
+                        out, sigma_range=self.opt['gaussian_sigma_range'], clip=True, rounds=False, gray_prob=1)
+                    # out, _ = add_heteroscedastic_gnoise(out, device=self.device,
+                    #                                     sigma_1_range=self.opt['sigma_1_range'],
+                    #                                     sigma_2_range=self.opt['sigma_2_range'])
             self.lq = torch.clamp((out[:, 0, :, :].unsqueeze(1) * 255.0).round(), 0, 255) / 255.
 
             # random crop
@@ -218,7 +221,6 @@ class RealTEMSRModel(SRModel):
                 # plt.show()
             assert False
             '''
-
 
             # training pair pool
             self._dequeue_and_enqueue()
