@@ -44,10 +44,10 @@ def main():
     opt['compression_level'] = 0
 
     # HR images
-    opt['input_folder'] = 'D:\Datasets\Sim ReSe2\\all'
-    opt['save_folder'] = 'D:\Datasets\Sim ReSe2\crops'
-    opt['crop_size'] = 256
-    opt['step'] = 128
+    opt['input_folder'] = 'F:\Datasets\Sim ReSe2\\all'
+    opt['save_folder'] = 'F:\Datasets\Sim ReSe2\\all_crops'
+    opt['crop_size'] = 512
+    opt['step'] = 256
     opt['thresh_size'] = 0
     extract_subimages(opt)
 
@@ -127,13 +127,12 @@ def worker(path, opt):
     step = opt['step']
     thresh_size = opt['thresh_size']
     img_name, extension = osp.splitext(osp.basename(path))
-
     # remove the x2, x3, x4 and x8 in the filename for DIV2K
     img_name = img_name.replace('x2', '').replace('x3', '').replace('x4', '').replace('x8', '')
-
-    img = cv2.imread(path, cv2.IMREAD_UNCHANGED)
-    # img = tiffile.imread(path)
-
+    if '.tif' in path:
+        img = tiffile.imread(path)
+    else:
+        img = cv2.imread(path, 0)
     h, w = img.shape[0:2]
     h_space = np.arange(0, h - crop_size + 1, step)
     if h - (h_space[-1] + crop_size) > thresh_size:
@@ -150,7 +149,7 @@ def worker(path, opt):
             cropped_img = np.ascontiguousarray(cropped_img)
             # tiffile.imwrite(osp.join(opt['save_folder'], f'{img_name}_s{index:03d}{extension}'), cropped_img)
             cv2.imwrite(
-                osp.join(opt['save_folder'], f'{img_name}_s{index:03d}{extension}'), cropped_img,
+                osp.join(opt['save_folder'], f'{img_name}_s{index:03d}.png'), cropped_img,
                 [cv2.IMWRITE_PNG_COMPRESSION, opt['compression_level']])
     process_info = f'Processing {img_name} ...'
     return process_info

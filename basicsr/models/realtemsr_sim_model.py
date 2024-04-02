@@ -143,9 +143,9 @@ class RealTEMSRSimModel(SRModel):
 
             out = self.gt
             if self.opt['randomshuffle']:
-                seq = np.random.choice([1, 2, 3, 4, 5, 6], size=6, replace=False)
+                seq = np.random.choice([1, 2, 3, 4, 5], size=5, replace=False)
             else:
-                seq = [1, 2, 3, 4, 5, 6]
+                seq = [1, 2, 3, 4, 5]
 
             for step in seq:
                 if step == 1:
@@ -191,8 +191,6 @@ class RealTEMSRSimModel(SRModel):
                     # 2. gaussian noise
                     out = random_add_gaussian_noise_pt(
                         out, sigma_range=self.opt['gaussian_sigma_range'], clip=True, rounds=False, gray_prob=1)
-                elif step == 6:
-                    out = add_scan_noise(out, self.opt['sigma_jitter'], phi=np.pi / 2)
 
             self.lq = torch.clamp((out[:, 0, :, :].unsqueeze(1) * 255.0).round(), 0, 255) / 255.
 
@@ -200,13 +198,16 @@ class RealTEMSRSimModel(SRModel):
             gt_size = self.opt['gt_size']
             self.gt, self.lq = paired_random_crop(self.gt, self.lq, gt_size, self.opt['scale'])
 
+            # use scan noise only for crop for computational efficiency
+            if np.random.uniform() < self.opt['scan_noise_prob']:
+                self.lq = add_scan_noise(self.lq, self.opt['sigma_jitter'], phi=np.pi / 2)
             '''
             for i in range(self.gt.shape[0]):
                 gt_img = (self.gt.detach().cpu().numpy()[i].squeeze() * 255).astype(np.uint8)
                 lq_img = (self.lq.detach().cpu().numpy()[i].squeeze() * 255).astype(np.uint8)
 
-                cv2.imwrite('D:\github\TEMSR\experiments\\gt{}.png'.format(i), gt_img)
-                cv2.imwrite('D:\github\TEMSR\experiments\\lq{}.png'.format(i), lq_img)
+                cv2.imwrite('F:\github\TEMSR\experiments\\gt{}.png'.format(i), gt_img)
+                cv2.imwrite('F:\github\TEMSR\experiments\\lq{}.png'.format(i), lq_img)
                 # plt.subplot(121)
                 # plt.title('gt')
                 # plt.imshow(gt_img, 'gray')

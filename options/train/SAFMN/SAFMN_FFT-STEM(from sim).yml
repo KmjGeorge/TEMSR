@@ -1,4 +1,4 @@
-name: SAFMN_FFT_STEM(from sim)_p128b16_blur0.2ct46com36poi48g15j5
+name: SAFMN_FFT_STEM(from sim)_p84b16blur0ct46com36poi48g15j5
 model_type: RealTEMSRSimModel
 scale: 1
 num_gpu: 1
@@ -7,24 +7,25 @@ manual_seed: 12345
 # ----------------- options for synthesizing training data in RealESRNetModel ----------------- #
 gt_usm: False  # USM the ground-truth
 
-blur_prob: 0.2
+blur_prob: 0
 contrast_range: [0.4, 0.6]
 compensation_range: [0.3, 0.6]
 poisson_scale_range: [4, 8]
 gaussian_sigma_range: [1, 5]
+scan_noise_prob: 0.2
 sigma_jitter: 5
 resize_prob: [0., 0., 1]  # up, down, keep
 resize_range: [0.3, 1.5]
 randomshuffle: False
 
-gt_size: 128
-queue_size: 256
+gt_size: 84
+queue_size: 128
 
 datasets:
   train:
     name: ReSe2_Sim
     type: RealTEMDataset
-    dataroot_gt: D:\Datasets\Sim ReSe2\crops
+    dataroot_gt: F:\Datasets\Sim ReSe2\all_crops
     meta_info: ~
 
     filename_tmpl: '{}'
@@ -40,16 +41,24 @@ datasets:
     betag_range: [ 0.5, 4 ]
     betap_range: [ 1, 2 ]
 
-    gt_size: 128
+    gt_size: 84
     use_hflip: true
     use_rot: true
 
     # data loader
     num_worker_per_gpu: 1
     batch_size_per_gpu: 16
-    dataset_enlarge_ratio: 100
+    dataset_enlarge_ratio: 20
     prefetch_mode: cuda
     pin_memory: true
+
+  val:
+    name: SimDeg
+    type: PairedImageDataset
+    dataroot_gt: F:\Datasets\STEM ReSe2\ReSe2\paired\offset\GT_crops 256 256 png
+    dataroot_lq: F:\Datasets\STEM ReSe2\ReSe2\paired\offset\LQ_crops(deg from GT) 256 256 png
+    io_backend:
+      type: disk
 
 network_g:
   type: SAFMN_FFT
