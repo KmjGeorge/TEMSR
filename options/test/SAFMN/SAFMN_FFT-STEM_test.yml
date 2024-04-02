@@ -1,0 +1,99 @@
+name: SAFMN_FFT_STEM_test
+model_type: RealTEMSRSimModel
+scale: 1
+num_gpu: 1
+manual_seed: 12345
+
+# ----------------- options for synthesizing training data in RealESRNetModel ----------------- #
+gt_usm: False  # USM the ground-truth
+
+blur_prob: 0.2
+contrast_range: [0.4, 0.6]
+compensation_range: [0.3, 0.6]
+poisson_scale_range: [4, 8]
+gaussian_sigma_range: [1, 5]
+sigma_jitter: 5
+resize_prob: [0., 0., 1]  # up, down, keep
+resize_range: [0.3, 1.5]
+randomshuffle: False
+
+gt_size: 128
+queue_size: 256
+
+datasets:
+  test_1:
+    name: SimDeg
+    type: PairedImageDataset
+    dataroot_gt: F:\Datasets\STEM ReSe2\ReSe2\paired\offset\GT_crops 256 256 png
+    dataroot_lq: F:\Datasets\STEM ReSe2\ReSe2\paired\offset\LQ_crops(deg from GT) 256 256 png
+    io_backend:
+      type: disk
+
+network_g:
+  type: SAFMN_FFT
+  in_chans: 1
+  dim: 36
+  n_blocks: 12
+  ffn_scale: 2.0
+  upscaling_factor: 1
+
+# path
+path:
+  pretrain_network_g: F:\github\TEMSR\experiments\SAFMN_FFT_STEM_p84b32_ct46com36poi48g15\models\\net_g_230000.pth
+  strict_load_g: true
+  resume_state: ~
+
+# training settings
+train:
+  optim_g:
+    type: AdamW
+    lr: !!float 1e-4
+    weight_decay: 0.
+    betas: [0.9, 0.99]
+
+  scheduler:
+    type: CosineAnnealingRestartLR
+    periods: [100000]
+    restart_weights: [1]
+    eta_min: !!float 1e-6
+  total_iter: 100000
+  warmup_iter: -1
+
+  # losses
+  pixel_opt:
+    type: L1Loss
+    loss_weight: 1.0
+    reduction: mean
+  fft_opt:
+    type: FFTLoss
+    loss_weight: 0.05
+    reduction: mean
+
+val:
+ val_freq: !!float 1e4
+ suffix: ~
+ save_img: true
+ metrics:
+   psnr: # metric name
+     type: calculate_psnr
+     crop_border: 0
+     test_y_channel: false
+   ssim:
+     type: calculate_ssim
+     crop_border: 0
+     test_y_channel: false
+
+# logging settings
+logger:
+  print_freq: 1000
+  save_checkpoint_freq: !!float 1e4
+  use_tb_logger: true
+  wandb:
+    project: ~
+    resume_id: ~
+
+# dist training settings
+dist_params:
+  backend: nccl
+  port: 29500
+
