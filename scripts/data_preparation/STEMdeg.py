@@ -331,7 +331,7 @@ def deg(gt_img, noise='poisson-gaussian',
                 noise = None
             else:
                 raise 'Error noise!'
-        out = torch.clamp((out[:, 0, :, :].unsqueeze(1) * 255.0).round(), 0, 255) / 255.
+    out = torch.clamp((out[:, 0, :, :].unsqueeze(1) * 255.0).round(), 0, 255) / 255.
 
     return out, noise
 
@@ -378,7 +378,8 @@ def deg_from_sim(gt_img, noise='poisson-gaussian',
                  resize_range=[0.3, 1.5],
                  sigma_1_range=[5e-3, 5e-2],
                  sigma_2_range=[1e-3, 1e-2],
-                 sigma_jitter=5,
+                 sigma_jitter_range=[2, 5],
+                 scan_noise_prob=0.2,
                  randomshuffle=False):
     gt_img = gt_img / 255.0
     out = gt_img
@@ -392,9 +393,9 @@ def deg_from_sim(gt_img, noise='poisson-gaussian',
             seq = np.random.choice([2, 3, 4, 5, 6], size=5, replace=False)
     else:
         if use_blur:
-            seq = [1, 2, 3, 4, 5, 6]
+            seq = [1, 2, 3, 4, 5]
         else:
-            seq = [2, 3, 4, 5, 6]
+            seq = [2, 3, 4, 5]
     for step in seq:
         if step == 1:
             kernel = generate_kernel()
@@ -424,6 +425,7 @@ def deg_from_sim(gt_img, noise='poisson-gaussian',
                 out, noise1 = random_add_poisson_noise_pt(out, scale_range=scale_range, gray_prob=1)  # poisson noise
                 out, noise2 = random_add_gaussian_noise_pt(
                     out, sigma_range=sigma_range, gray_prob=1)
+                out = out[:, 0, :, :].unsqueeze(0)
             elif noise == 'heteroscedastic_gnoise':
                 out, noise = add_heteroscedastic_gnoise(out, device='cpu', sigma_1_range=sigma_1_range,
                                                         sigma_2_range=sigma_2_range)
@@ -431,9 +433,10 @@ def deg_from_sim(gt_img, noise='poisson-gaussian',
                 noise = None
             else:
                 raise 'Error noise!'
-        elif step == 6:
-            out = add_scan_noise(out, sigma_jitter, phi=np.pi / 2)
-        out = torch.clamp((out[:, 0, :, :].unsqueeze(1) * 255.0).round(), 0, 255) / 255.
+    if np.random.uniform() < scan_noise_prob:
+        sigma_jitter = np.random.uniform(sigma_jitter_range[0], sigma_jitter_range[1])
+        out = add_scan_noise(out, sigma_jitter, phi=np.pi / 2)
+    out = torch.clamp((out * 255.0).round(), 0, 255) / 255.
 
     return out, noise
 
@@ -505,10 +508,10 @@ def generate_degval(gt_path, save_lq_path):
         gt_img = cv2.imread(os.path.join(gt_path, filename), 0)
         gt_tensor = grayimg2tensor(gt_img)
         deg_gt, noise = deg(gt_tensor, noise='poisson-gaussian',
-                            contrast_range=[0.4, 0.6],
-                            compensation_range=[0.3, 0.6],
-                            scale_range=[4, 8],
-                            sigma_range=[1, 5],
+                            contrast_range=[1., 1.],
+                            compensation_range=[0.0, 0.0],
+                            scale_range=[10, 10],
+                            sigma_range=[10, 10],
                             randomshuffle=False)
 
         deg_gt_img = tensor2inp(deg_gt)
@@ -532,21 +535,73 @@ def add_scan_noise(img, sigma_jitter=0.2, phi=np.pi / 4, f=1 / 200):
     return img_new
 
 
-if __name__ == '__main__':
+def make_deg_folder(n_thread=10, orig_folder='F:\Datasets\Sim ReSe2\\all_crops',
+             save_gt_folder='F:\Datasets\Sim ReSe2\\all_crops_GT',
+             save_lq_folder='F:\Datasets\Sim ReSe2\\all_crops_LQ',
+             repeats=20):
+    from multiprocessing import Pool
     from tqdm import tqdm
 
-    img_sim = cv2.imread('D:\Datasets\Sim ReSe2\Param1\\1.5_0.8_0_0_35.0_0.6_1011.png', 0)
+    img_list = os.listdir(orig_folder)
+    pbar = tqdm(total=len(img_list), unit='image', desc='Extract')
+    pool = Pool(n_thread)
+    for filename in img_list:
+        orig_path = os.path.join(orig_folder, filename)
+        save_gt_path = os.path.join(save_gt_folder, filename)
+        save_lq_path = os.path.join(save_lq_folder, filename)
+        pool.apply_async(worker, args=(orig_path, save_gt_path, save_lq_path, repeats), callback=lambda arg: pbar.update(1))
+    pool.close()
+    pool.join()
+    pbar.close()
+    print('All processes done.')
+
+
+def worker(orig_path, save_gt_path, save_lq_path, repeats):
+    img_sim = cv2.imread(orig_path, 0)
     img_sim_pt = grayimg2tensor(img_sim)
-    img_deg_pt, _ = deg_from_sim(img_sim_pt,
-                                 use_blur=False,
-                                 compensation_range=[-0.1, 0.1],
-                                 contrast_range=[0.4, 0.8],
-                                 resize_prob=[0.2, 0.7, 0.1],
-                                 resize_range=[0.3, 1.5],
-                                 scale_range=[2, 7],
-                                 sigma_range=[1, 5])
-    img_deg = tensor2inp(img_deg_pt)
-    cv2.imwrite('D:\Datasets\Sim ReSe2\Param1\\1.5_0.8_0_0_35.0_0.6_1011_fulldeg.png', img_deg)
+    for it in range(repeats):
+        cv2.imwrite(
+            os.path.join('F:\Datasets\Sim ReSe2\\all_crops_GT', save_gt_path.replace('.png', '_{}.png'.format(it))),
+            img_sim)
+        img_deg_pt, _ = deg_from_sim(img_sim_pt,
+                                     noise='poisson-gaussian',
+                                     contrast_range=[0.1, 0.3],
+                                     compensation_range=[0.1, 0.2],
+                                     resize_prob=[0.2, 0.7, 0.1],
+                                     resize_range=[0.25, 2],
+                                     scale_range=[1, 5],
+                                     sigma_range=[1, 3],
+                                     scan_noise_prob=0.7,
+                                     sigma_jitter_range=[2, 6],
+                                     randomshuffle=False)
+        img_deg = tensor2inp(img_deg_pt)
+        cv2.imwrite(
+            os.path.join('F:\Datasets\Sim ReSe2\\all_crops_LQ', save_lq_path.replace('.png', '_{}.png'.format(it))),
+            img_deg)
+
+
+if __name__ == '__main__':
+    make_deg_folder(n_thread=10, repeats=20)
+    '''
+    # folder deg
+    gt_folder = 'F:\Datasets\Sim ReSe2\\all_crops'
+    lq_folder = 'F:\Datasets\Sim ReSe2\\simlq'
+    for filename in tqdm(os.listdir(gt_folder)):
+        img_sim = cv2.imread(os.path.join(gt_folder, filename), 0)
+        img_sim_pt = grayimg2tensor(img_sim)
+        img_deg_pt, _ = deg_from_sim(img_sim_pt,
+                                     use_blur=False,
+                                     compensation_range=[0.3, 0.6],
+                                     contrast_range=[0.4, 0.6],
+                                     resize_prob=[0., 0., 1.],
+                                     resize_range=[0.3, 1.5],
+                                     scale_range=[4, 8],
+                                     sigma_range=[1, 5],
+                                     scan_noise_prob=0.,
+                                     sigma_jitter=5)
+        img_deg = tensor2inp(img_deg_pt)
+        cv2.imwrite(os.path.join(lq_folder, filename), img_deg)
+    '''
 
     # plt.imshow(img_deg, 'gray')
     # plt.savefig()
