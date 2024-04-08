@@ -1,0 +1,64 @@
+name: SAFMN_FFT_STEM(from sim offline inference on real)_p224b8_test_3
+model_type: SRModel
+scale: 1
+num_gpu: 1
+manual_seed: 12345
+color: gray
+
+
+datasets:
+  test_1:
+    name: RealDeg
+    type: SingleImageDataset
+    color: gray
+    dataroot_lq: F:\Datasets\STEM ReSe2\ReSe2\all_GT
+    io_backend:
+      type: disk
+#  test_2:
+#    name: SimDeg
+#    type: SingleImageDataset
+#    color: gray
+#    dataroot_lq: F:\Datasets\Sim ReSe2\simval\LQ
+#    io_backend:
+#      type: disk
+
+
+network_g:
+  type: SAFMN_FFT
+  in_chans: 1
+  dim: 36
+  n_blocks: 12
+  ffn_scale: 2.0
+  upscaling_factor: 1
+
+# path
+path:
+  pretrain_network_g: F:\github\TEMSR\experiments\SAFMN_FFT_STEM(from sim offline)_p224b8\models\\net_g_120000.pth
+  strict_load_g: true
+  resume_state: ~
+
+
+val:
+ val_freq: !!float 1e4
+ suffix: ~
+ save_img: true
+ metrics:
+   snr:
+     type: calculate_snr
+   tv:
+     type: calculate_tv
+
+# logging settings
+logger:
+  print_freq: 1000
+  save_checkpoint_freq: !!float 1e4
+  use_tb_logger: true
+  wandb:
+    project: ~
+    resume_id: ~
+
+# dist training settings
+dist_params:
+  backend: nccl
+  port: 29500
+

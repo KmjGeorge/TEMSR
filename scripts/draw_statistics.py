@@ -39,11 +39,12 @@ def show_statics(image_path1, image_path2):
 
     # 绘制QQ图
     fig = sm.qqplot_2samples(image1.flatten(), image2.flatten(), line='45')
-    plt.title('Q-Q Plot of Image1 and Image2')
+    plt.title('Q-Q Plot of RealLQ and SimLQ')
+    plt.savefig('Q-Q.png', dpi=200)
     plt.show()
 
 
 if __name__ == '__main__':
-    image_path1 = 'F:\Datasets\Sim ReSe2\Param1\\0.3_0.0_0_0_35.0_0.6_1728_fulldeg.png'
-    image_path2 = 'F:\Datasets\STEM ReSe2\ReSe2\\all_LQ\\20230829 2015 7.70 Mx 13 nm HAADF_s002.tif'
+    image_path1 = 'F:\Datasets\Sim ReSe2\simlq\\0.3_0.0_0_0_35.0_0.6_1728_deg0.png'
+    image_path2 = 'F:\Datasets\STEM ReSe2\ReSe2\\all_GT\\20230829 2015 7.70 Mx 13 nm 0001 HAADF_s010.png'
     show_statics(image_path1, image_path2)

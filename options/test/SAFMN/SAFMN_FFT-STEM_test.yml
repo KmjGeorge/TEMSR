@@ -1,4 +1,4 @@
-name: SAFMN_FFT_STEM_test
+name: SAFMN_FFT_STEM_test_noref_simandreal_1
 model_type: RealTEMSRSimModel
 scale: 1
 num_gpu: 1
@@ -23,9 +23,17 @@ queue_size: 256
 datasets:
   test_1:
     name: SimDeg
-    type: PairedImageDataset
-    dataroot_gt: F:\Datasets\STEM ReSe2\ReSe2\paired\offset\GT_crops 256 256 png
+    type: SingleImageDataset
+    color: gray
     dataroot_lq: F:\Datasets\STEM ReSe2\ReSe2\paired\offset\LQ_crops(deg from GT) 256 256 png
+    io_backend:
+      type: disk
+
+  test_2:
+    name: RealDeg
+    type: SingleImageDataset
+    color: gray
+    dataroot_lq: F:\Datasets\STEM ReSe2\ReSe2\paired\offset\LQ_crops 256 256 png
     io_backend:
       type: disk
 
@@ -43,45 +51,25 @@ path:
   strict_load_g: true
   resume_state: ~
 
-# training settings
-train:
-  optim_g:
-    type: AdamW
-    lr: !!float 1e-4
-    weight_decay: 0.
-    betas: [0.9, 0.99]
-
-  scheduler:
-    type: CosineAnnealingRestartLR
-    periods: [100000]
-    restart_weights: [1]
-    eta_min: !!float 1e-6
-  total_iter: 100000
-  warmup_iter: -1
-
-  # losses
-  pixel_opt:
-    type: L1Loss
-    loss_weight: 1.0
-    reduction: mean
-  fft_opt:
-    type: FFTLoss
-    loss_weight: 0.05
-    reduction: mean
 
 val:
  val_freq: !!float 1e4
  suffix: ~
  save_img: true
  metrics:
-   psnr: # metric name
-     type: calculate_psnr
-     crop_border: 0
-     test_y_channel: false
-   ssim:
-     type: calculate_ssim
-     crop_border: 0
-     test_y_channel: false
+#   psnr: # metric name
+#     type: calculate_psnr
+#     crop_border: 0
+#     test_y_channel: false
+#   ssim:
+#     type: calculate_ssim
+#     crop_border: 0
+#     test_y_channel: false
+    snr:
+      type: calculate_snr
+    tv:
+      type: calculate_tv
+
 
 # logging settings
 logger:

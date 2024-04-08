@@ -62,6 +62,8 @@ class SingleImageDataset(data.Dataset):
         # normalize
         if self.mean is not None or self.std is not None:
             normalize(img_lq, self.mean, self.std, inplace=True)
+        if 'color' in self.opt and self.opt['color'] == 'gray':
+            img_lq = img_lq[0].unsqueeze(0)
         return {'lq': img_lq, 'lq_path': lq_path}
 
     def __len__(self):

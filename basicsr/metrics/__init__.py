@@ -4,7 +4,9 @@ from basicsr.utils.registry import METRIC_REGISTRY
 from .niqe import calculate_niqe
 from .psnr_ssim import calculate_psnr, calculate_ssim
 from .pi import calculate_pi
-__all__ = ['calculate_psnr', 'calculate_ssim', 'calculate_niqe']
+from .snr import calculate_snr
+from .tv import calculate_tv
+__all__ = ['calculate_psnr', 'calculate_ssim', 'calculate_niqe', 'calculate_snr', 'calculate_tv']
 
 
 def calculate_metric(data, opt):
