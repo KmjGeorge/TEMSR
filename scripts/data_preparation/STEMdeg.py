@@ -18,6 +18,7 @@ from PIL import Image
 from basicsr.data.degradations import circular_lowpass_kernel, random_mixed_kernels
 from basicsr.losses.cxloss import symetric_CX_loss
 from basicsr.utils.img_process_util import filter2D
+from tqdm import tqdm
 
 
 def setup_seed(seed):
@@ -224,8 +225,10 @@ def random_generate_gaussian_noise_pt(img, sigma_range=(0, 10), gray_prob=0):
     return generate_gaussian_noise_pt(img, sigma, gray_noise)
 
 
-def random_add_gaussian_noise_pt(img, sigma_range=(0, 1.0), gray_prob=0, clip=True, rounds=False):
+def random_add_gaussian_noise_pt(img, sigma_range=(0, 1.0), gray_prob=0, clip=True, rounds=False, scale_range=[1.0, 1.0]):
+    scale = np.random.uniform(scale_range[0], scale_range[1])
     noise = random_generate_gaussian_noise_pt(img, sigma_range, gray_prob)
+    noise = noise * scale
     out = img + noise
     if clip and rounds:
         out = torch.clamp((out * 255.0).round(), 0, 255) / 255.
@@ -323,7 +326,7 @@ def deg(gt_img, noise='poisson-gaussian',
             if noise == 'poisson-gaussian':
                 out, noise1 = random_add_poisson_noise_pt(out, scale_range=scale_range, gray_prob=1)  # poisson noise
                 out, noise2 = random_add_gaussian_noise_pt(
-                    out, sigma_range=sigma_range, gray_prob=1)
+                    out, sigma_range=sigma_range, gray_prob=1, scale=5)
             elif noise == 'heteroscedastic_gnoise':
                 out, noise = add_heteroscedastic_gnoise(out, device='cpu', sigma_1_range=sigma_1_range,
                                                         sigma_2_range=sigma_2_range)
@@ -336,16 +339,15 @@ def deg(gt_img, noise='poisson-gaussian',
     return out, noise
 
 
-def generate_kernel(kernel_range=[2 * v + 1 for v in range(3, 7)], sinc_prob=0.,
-                    kernel_list=['iso', 'aniso', 'generalized_iso', 'generalized_aniso', 'plateau_iso',
-                                 'plateau_aniso'],
+def generate_kernel(kernel_range=[2 * v + 1 for v in range(3, 7)],
+                    sinc_prob=0.,
+                    kernel_list=['iso', 'aniso', 'generalized_iso', 'generalized_aniso', 'plateau_iso', 'plateau_aniso'],
                     kernel_prob=[0.45, 0.25, 0.12, 0.03, 0.12, 0.03],
                     blur_sigma=[0.1, 1],
-                    betag_range=[0.1, 1],
-                    betap_range=[0.1, 1]):
+                    betag_range=[0.1, 0.5],
+                    betap_range=[0.1, 0.5]):
     kernel_size = random.choice(kernel_range)
     if np.random.uniform() < sinc_prob:
-        # this sinc filter setting is for kernels ranging from [7, 21]
         if kernel_size < 13:
             omega_c = np.random.uniform(np.pi / 3, np.pi)
         else:
@@ -372,8 +374,9 @@ def deg_from_sim(gt_img, noise='poisson-gaussian',
                  use_blur=False,
                  compensation_range=[0., 0.],
                  contrast_range=[1., 1.],
-                 scale_range=[0., 1.],
-                 sigma_range=[0., 1.],
+                 scale_p_range=[1., 1.],
+                 sigma_range=[1., 1.],
+                 scale_g_range=[1., 1.],
                  resize_prob=[0., 0., 1],
                  resize_range=[0.3, 1.5],
                  sigma_1_range=[5e-3, 5e-2],
@@ -393,9 +396,10 @@ def deg_from_sim(gt_img, noise='poisson-gaussian',
             seq = np.random.choice([2, 3, 4, 5, 6], size=5, replace=False)
     else:
         if use_blur:
-            seq = [1, 2, 3, 4, 5]
+            seq = [1, 2, 3, 4, 5, 6]
         else:
-            seq = [2, 3, 4, 5]
+            seq = [2, 3, 4, 5, 6]
+    seq = list(seq)
     for step in seq:
         if step == 1:
             kernel = generate_kernel()
@@ -422,9 +426,9 @@ def deg_from_sim(gt_img, noise='poisson-gaussian',
             out = F.interpolate(out, size=(orig_h, orig_w), mode=mode)
         elif step == 5:
             if noise == 'poisson-gaussian':
-                out, noise1 = random_add_poisson_noise_pt(out, scale_range=scale_range, gray_prob=1)  # poisson noise
+                out, noise1 = random_add_poisson_noise_pt(out, scale_range=scale_p_range, gray_prob=1)  # poisson noise
                 out, noise2 = random_add_gaussian_noise_pt(
-                    out, sigma_range=sigma_range, gray_prob=1)
+                    out, sigma_range=sigma_range, gray_prob=1, scale_range=scale_g_range)
                 out = out[:, 0, :, :].unsqueeze(0)
             elif noise == 'heteroscedastic_gnoise':
                 out, noise = add_heteroscedastic_gnoise(out, device='cpu', sigma_1_range=sigma_1_range,
@@ -433,12 +437,14 @@ def deg_from_sim(gt_img, noise='poisson-gaussian',
                 noise = None
             else:
                 raise 'Error noise!'
-    if np.random.uniform() < scan_noise_prob:
-        sigma_jitter = np.random.uniform(sigma_jitter_range[0], sigma_jitter_range[1])
-        out = add_scan_noise(out, sigma_jitter, phi=np.pi / 2)
+        elif step == 6:
+            if np.random.uniform() < scan_noise_prob:
+                sigma_jitter = np.random.uniform(sigma_jitter_range[0], sigma_jitter_range[1])
+                out = add_scan_noise(out, sigma_jitter, phi=np.pi / 2)
+
     out = torch.clamp((out * 255.0).round(), 0, 255) / 255.
 
-    return out, noise
+    return out, noise, seq
 
 
 def grayimg2tensor(gray):
@@ -536,9 +542,9 @@ def add_scan_noise(img, sigma_jitter=0.2, phi=np.pi / 4, f=1 / 200):
 
 
 def make_deg_folder(n_thread=10, orig_folder='F:\Datasets\Sim ReSe2\\all_crops',
-             save_gt_folder='F:\Datasets\Sim ReSe2\\all_crops_GT',
-             save_lq_folder='F:\Datasets\Sim ReSe2\\all_crops_LQ',
-             repeats=20):
+                    save_gt_folder='F:\Datasets\Sim ReSe2\\all_crops_GT',
+                    save_lq_folder='F:\Datasets\Sim ReSe2\\all_crops_LQ',
+                    repeats=20):
     from multiprocessing import Pool
     from tqdm import tqdm
 
@@ -547,9 +553,13 @@ def make_deg_folder(n_thread=10, orig_folder='F:\Datasets\Sim ReSe2\\all_crops',
     pool = Pool(n_thread)
     for filename in img_list:
         orig_path = os.path.join(orig_folder, filename)
-        save_gt_path = os.path.join(save_gt_folder, filename)
+        if save_gt_folder:
+            save_gt_path = os.path.join(save_gt_folder, filename)
+        else:
+            save_gt_path = None
         save_lq_path = os.path.join(save_lq_folder, filename)
-        pool.apply_async(worker, args=(orig_path, save_gt_path, save_lq_path, repeats), callback=lambda arg: pbar.update(1))
+        pool.apply_async(worker, args=(orig_path, save_gt_path, save_lq_path, repeats),
+                         callback=lambda arg: pbar.update(1))
     pool.close()
     pool.join()
     pbar.close()
@@ -560,28 +570,30 @@ def worker(orig_path, save_gt_path, save_lq_path, repeats):
     img_sim = cv2.imread(orig_path, 0)
     img_sim_pt = grayimg2tensor(img_sim)
     for it in range(repeats):
-        cv2.imwrite(
-            os.path.join('F:\Datasets\Sim ReSe2\\all_crops_GT', save_gt_path.replace('.png', '_{}.png'.format(it))),
-            img_sim)
-        img_deg_pt, _ = deg_from_sim(img_sim_pt,
-                                     noise='poisson-gaussian',
-                                     contrast_range=[0.1, 0.3],
-                                     compensation_range=[0.1, 0.2],
-                                     resize_prob=[0.2, 0.7, 0.1],
-                                     resize_range=[0.25, 2],
-                                     scale_range=[1, 5],
-                                     sigma_range=[1, 3],
-                                     scan_noise_prob=0.7,
-                                     sigma_jitter_range=[2, 6],
-                                     randomshuffle=False)
+        if save_gt_path:
+            cv2.imwrite(save_gt_path.replace('.png', '_{}.png'.format(it)), img_sim)
+        img_deg_pt, _, _ = deg_from_sim(img_sim_pt,
+                                        use_blur=False,
+                                        noise='poisson-gaussian',
+                                        contrast_range=[0.3, 0.5],
+                                        compensation_range=[0.2, 0.35],
+                                        resize_prob=[0.2, 0.7, 0.1],
+                                        resize_range=[0.25, 2],
+                                        scale_p_range=[3.0, 3.0],
+                                        sigma_range=[3.0, 3.0],
+                                        scale_g_range=[5, 10],
+                                        scan_noise_prob=1.0,
+                                        sigma_jitter_range=[2, 5],
+                                        randomshuffle=False)
         img_deg = tensor2inp(img_deg_pt)
-        cv2.imwrite(
-            os.path.join('F:\Datasets\Sim ReSe2\\all_crops_LQ', save_lq_path.replace('.png', '_{}.png'.format(it))),
-            img_deg)
+        cv2.imwrite(save_lq_path.replace('.png', '_{}.png'.format(it)), img_deg)
 
 
 if __name__ == '__main__':
-    make_deg_folder(n_thread=10, repeats=20)
+    make_deg_folder(n_thread=8, orig_folder='D:\Datasets\Sim ReSe2\yolo\\roboflow\simGT\\val\images',
+                    save_gt_folder=None,
+                    save_lq_folder='D:\Datasets\Sim ReSe2\yolo\\roboflow\simLQ\\val\images', repeats=1)
+
     '''
     # folder deg
     gt_folder = 'F:\Datasets\Sim ReSe2\\all_crops'
@@ -607,63 +619,51 @@ if __name__ == '__main__':
     # plt.savefig()
     # plt.show()
     #
-    '''
-    # generate deg set for validation
-    generate_degval('D:\Datasets\STEM ReSe2\ReSe2\paired\offset\GT_crops 256 256 png',
-                    'D:\Datasets\STEM ReSe2\ReSe2\paired\offset\LQ_crops(deg from GT) 256 256 png')
-    '''
 
     '''
-    gt_img = cv2.imread('D:\Datasets\STEM ReSe2\ReSe2\paired\offset\GT_crops 256 256 png\\2219_x19y2_s001.png', 0)
-    lq_img = cv2.imread('D:\Datasets\STEM ReSe2\ReSe2\paired\offset\LQ_crops 256 256 png\\2219_x19y2_s001.png', 0)
-    gt_tensor, lq_tensor = grayimg2tensor(gt_img), grayimg2tensor(lq_img)
+    gt_img = cv2.imread('D:\Datasets\Sim ReSe2\\all\\0.3_0.0_0_0_35.0_0.6_1728.png', 0).astype(np.float32)
+    lq_img = cv2.imread('D:\Datasets\STEM ReSe2\ReSe2\singlelayer\LQ\crops1024\\20230829 2015 7.70 Mx 13 nm HAADF_s001.png', 0).astype(np.float32)
+    gt_tensor, lq_tensor = grayimg2tensor(gt_img).cuda(), grayimg2tensor(lq_img).cuda()
+    lq_tensor /= 255.0
     # hyper search
     layer_weights = {'conv5_4': 1}
     vgg = VGGFeatureExtractor(
         layer_name_list=list(layer_weights.keys()),
         vgg_type='vgg19',
         use_input_norm=True,
-        range_norm=False)
-    compensation_values = np.arange(-0.1, 0.1, 0.02)
-    contrast_factors = [0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.1, 1.2, 1.3, 1.4, 1.5]
-    scale_ranges = [3, 4, 5, 6, 7, 8, 9, 10]
-    sigma_ranges = [1, 2, 3, 4, 5, 6]
-    neighborhood_sizes = [7, 9, 11, 13, 15, 17, 19, 21]
-    thresh_factors = np.arange(0.3, 0.7, 0.1)
-    sigma_1_ranges = [],
-    sigma_2_ranges = []
-    hetero_sigma1 = np.arange(0.05, 0.5, 0.02)
-    hetero_sigma2 = np.arange(0.01, 0.1, 0.01)
+        range_norm=False).cuda()
+    compensation_values = np.arange(-0.4, 0.4, 0.1)
+    contrast_factors = np.arange(0.1, 1.0, 0.1)
+    scale_ranges = np.arange(0.5, 5, 0.5)
+    sigma_ranges = np.arange(0.5, 5, 0.5)
     max_iters = 10000
     best_cx = 99999999
     best_mean = 99999999
     best_std = 99999999
-    best_param_cx = [1, 2, 3, 4]
-    best_param_mean = [1, 2, 3, 4]
-    best_param_std = [1, 2, 3, 4]
-    with open('D:\github\TEMSR\experiments\\hyper_log.txt', 'w') as f:
+    with open('D:\github\TEMSR\experiments\\hyper_log(sim).txt', 'w') as f:
         for iter in tqdm(range(max_iters)):
-            compensation_value = np.random.choice(compensation_values)
-            # contrast_factor = np.random.choice(contrast_factors)
-            # scale_range = np.random.choice(scale_ranges)
-            # sigma_range = np.random.choice(sigma_ranges)
-            sigma1_range = np.random.choice(hetero_sigma1).round(3)
-            sigma2_range = np.random.choice(hetero_sigma2).round(3)
-            neighborhood_size = np.random.choice(neighborhood_sizes)
-            thresh_factor = np.random.choice(thresh_factors)
-            deg_gt, noise = deg(gt_tensor, noise='heteroscedastic_gnoise',
-                                neighborhood_size=neighborhood_size,
-                                threshold_factor=thresh_factor,
-                                compensation_range=[compensation_value, compensation_value],
-                                sigma_1_range=[sigma1_range, sigma1_range],
-                                sigma_2_range=[sigma2_range, sigma2_range]
-                                )
+            compensation_value = np.random.choice(compensation_values).round(2)
+            contrast_factor = np.random.choice(contrast_factors).round(2)
+            scale_range = np.random.choice(scale_ranges).round(2)
+            sigma_range = np.random.choice(sigma_ranges).round(2)
+            deg_gt, noise, shuffle = deg_from_sim(gt_tensor,
+                                                  noise='poisson-gaussian',
+                                                  use_blur=False,
+                                                  contrast_range=[contrast_factor, contrast_factor],
+                                                  compensation_range=[compensation_value, compensation_value],
+                                                  scale_range=[scale_range, scale_range],
+                                                  sigma_range=[sigma_range, sigma_range],
+                                                  scan_noise_prob=0.,
+                                                  randomshuffle=True)
+            shuffle.remove(4)
             deg_gt_img = tensor2inp(deg_gt)
 
             cx_loss = caculate_cxloss(vgg, deg_gt, lq_tensor)
             mean_dis = math.fabs(lq_img.mean() - deg_gt_img.mean())
             std_dis = math.fabs(lq_img.std() - deg_gt_img.std())
-            f.write(str(neighborhood_size) + ' ' + str(thresh_factor) + ' ' + str(compensation_value) + ' ' + str(sigma1_range) +' ' + str(sigma2_range) + ' ====> ')
+            f.write(str(shuffle) + ' : ' + str(contrast_factor) + ' ' + str(compensation_value) + ' ' + str(
+                scale_range) + ' ' + str(
+                sigma_range) + ' ====> ')
             f.write('cx_loss = ' + str(cx_loss) + ' ' + 'mean_dis = ' + str(mean_dis) + ' ' + 'std_dis = ' + str(
                 std_dis) + ' ')
             # print(compensation_value, contrast_factor, scale_range, sigma_range, end=' ====> ')
@@ -672,17 +672,17 @@ if __name__ == '__main__':
             # print('std_dis =', std_dis, end=' ')
             if cx_loss < best_cx:
                 best_cx = cx_loss
-                best_param_cx = [neighborhood_size, thresh_factor, compensation_value, sigma1_range, sigma2_range]
+                best_param_cx = [shuffle, contrast_factor, compensation_value, scale_range, sigma_range]
                 f.write('Best CX! ')
                 # print('Best CX!', end=' ')
             if mean_dis < best_mean:
                 best_mean = mean_dis
-                best_param_mean = [neighborhood_size, thresh_factor, compensation_value, sigma1_range, sigma2_range]
+                best_param_mean = [shuffle, contrast_factor, compensation_value, scale_range, sigma_range]
                 f.write('Best Mean! ')
                 # print('Best Mean!', end=' ')
             if std_dis < best_std:
                 best_std = std_dis
-                best_param_std = [neighborhood_size, thresh_factor, compensation_value, sigma1_range, sigma2_range]
+                best_param_std = [shuffle, contrast_factor, compensation_value, scale_range, sigma_range]
                 f.write('Best Std! ')
                 # print('Best Std!', end=' ')
             # print(' ')
@@ -695,8 +695,8 @@ if __name__ == '__main__':
         print(best_mean, best_std, best_cx)
         print('Best Params for Mean Std Cx', end='  =======>  ')
         print(best_param_mean, best_param_std, best_param_cx)
-    '''
 
+    '''
     '''
     from tqdm import tqdm
 

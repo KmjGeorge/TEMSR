@@ -44,10 +44,10 @@ def main():
     opt['compression_level'] = 0
 
     # HR images
-    opt['input_folder'] = 'F:\Datasets\Sim ReSe2\\all'
-    opt['save_folder'] = 'F:\Datasets\Sim ReSe2\\all_crops'
-    opt['crop_size'] = 512
-    opt['step'] = 256
+    opt['input_folder'] = 'D:\Datasets\STEM ReSe2\ReSe2\singlelayer\LQ\\full'
+    opt['save_folder'] = 'D:\Datasets\STEM ReSe2\ReSe2\singlelayer\LQ\crops1024'
+    opt['crop_size'] = 1024
+    opt['step'] = 512
     opt['thresh_size'] = 0
     extract_subimages(opt)
 
