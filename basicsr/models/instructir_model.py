@@ -3,7 +3,6 @@ from collections import OrderedDict
 from os import path as osp
 
 from matplotlib import pyplot as plt
-from torch import nn
 from tqdm import tqdm
 
 from basicsr.archs import build_network
@@ -15,11 +14,11 @@ from .base_model import BaseModel
 
 
 @MODEL_REGISTRY.register()
-class SRModel(BaseModel):       # 继承于BaseModel，BaseModel提供所有Model共用的一些函数
+class InstructIRModel(BaseModel):       # 继承于BaseModel，BaseModel提供所有Model共用的一些函数
     """Base SR model for single image super-resolution."""
 
     def __init__(self, opt):    # 初始化，定义网络，读取权重
-        super(SRModel, self).__init__(opt)
+        super(InstructIRModel, self).__init__(opt)
         # define network
         self.net_g = build_network(opt['network_g'])    # 实例化网络结构
         self.net_g = self.model_to_device(self.net_g)
@@ -59,21 +58,14 @@ class SRModel(BaseModel):       # 继承于BaseModel，BaseModel提供所有Mode
             self.cri_pix = build_loss(train_opt['pixel_opt']).to(self.device)  # build_loss根据yml中的loss类型和参数，实例化loss类
         else:
             self.cri_pix = None
-        if train_opt.get('fft_opt'):
-            self.cri_fft = build_loss(train_opt['fft_opt']).to(self.device)
-        else:
-            self.cri_fft = None
-        if train_opt.get('cx_opt'):
-            self.cri_cx = build_loss(train_opt['cx_opt']).to(self.device)
-        else:
-            self.cri_cx = None
+
         if train_opt.get('perceptual_opt'):
             self.cri_perceptual = build_loss(train_opt['perceptual_opt']).to(self.device)
         else:
             self.cri_perceptual = None
 
-        # if self.cri_pix is None and self.cri_perceptual is None:
-        #     raise ValueError('Both pixel and perceptual losses are None.')
+        if self.cri_pix is None and self.cri_perceptual is None:
+            raise ValueError('Both pixel and perceptual losses are None.')
 
         # set up optimizers and schedulers
         self.setup_optimizers()
@@ -94,12 +86,14 @@ class SRModel(BaseModel):       # 继承于BaseModel，BaseModel提供所有Mode
 
     def feed_data(self, data):     # 喂数据，是与dataloder(dataset)的接口
         self.lq = data['lq'].to(self.device)
+        self.instruct_embd = data['instruct_embd'].to(self.device)
+        self.instruct_cls = data['instruct_cls']
         if 'gt' in data:
             self.gt = data['gt'].to(self.device)
 
     def optimize_parameters(self, current_iter):   # 定义了一个完整的train step，包括forward，loss计算，backward，参数优化
         self.optimizer_g.zero_grad()
-        self.output = self.net_g(self.lq)
+        self.output = self.net_g(self.lq, self.instruct_embd)
 
         l_total = 0
         loss_dict = OrderedDict()
@@ -117,19 +111,8 @@ class SRModel(BaseModel):       # 继承于BaseModel，BaseModel提供所有Mode
             if l_style is not None:
                 l_total += l_style
                 loss_dict['l_style'] = l_style
-        # fft loss
-        if self.cri_fft:
-            l_fft = self.cri_fft(self.output, self.gt)
-            l_total += l_fft
-            loss_dict['l_fft'] = l_fft
-        # cx loss
-        if self.cri_cx:
-            l_cx = self.cri_cx(self.output, self.gt)
-            l_total += l_cx
-            loss_dict['l_cx'] = l_cx
 
         l_total.backward()
-
         self.optimizer_g.step()
 
         self.log_dict = self.reduce_loss_dict(loss_dict)  # 用于显示loss，同时同步多卡上的loss
@@ -141,11 +124,11 @@ class SRModel(BaseModel):       # 继承于BaseModel，BaseModel提供所有Mode
         if hasattr(self, 'net_g_ema'):
             self.net_g_ema.eval()
             with torch.no_grad():
-                self.output = self.net_g_ema(self.lq)
+                self.output = self.net_g_ema(self.lq, self.instruct_embd)
         else:
             self.net_g.eval()
             with torch.no_grad():
-                self.output = self.net_g(self.lq)
+                self.output = self.net_g(self.lq, self.instruct_embd)
             self.net_g.train()
 
     def test_selfensemble(self):

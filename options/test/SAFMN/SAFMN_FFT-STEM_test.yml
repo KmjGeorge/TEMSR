@@ -1,4 +1,4 @@
-name: SAFMN_FFT_STEM_test_noref_simandreal_1
+name: SAFMN_FFT_STEM_test_noref_simforyolo
 model_type: RealTEMSRSimModel
 scale: 1
 num_gpu: 1
@@ -25,17 +25,10 @@ datasets:
     name: SimDeg
     type: SingleImageDataset
     color: gray
-    dataroot_lq: F:\Datasets\STEM ReSe2\ReSe2\paired\offset\LQ_crops(deg from GT) 256 256 png
+    dataroot_lq: F:\\Datasets\\Sim ReSe2\\roboflow\\simLQ\\val\\images
     io_backend:
       type: disk
 
-  test_2:
-    name: RealDeg
-    type: SingleImageDataset
-    color: gray
-    dataroot_lq: F:\Datasets\STEM ReSe2\ReSe2\paired\offset\LQ_crops 256 256 png
-    io_backend:
-      type: disk
 
 network_g:
   type: SAFMN_FFT
@@ -47,7 +40,7 @@ network_g:
 
 # path
 path:
-  pretrain_network_g: F:\github\TEMSR\experiments\SAFMN_FFT_STEM_p84b32_ct46com36poi48g15\models\\net_g_230000.pth
+  pretrain_network_g: F:\github\TEMSR\experiments\SAFMN_FFT_STEM(from sim offline)_p224b8\models\\net_g_120000.pth
   strict_load_g: true
   resume_state: ~
 
