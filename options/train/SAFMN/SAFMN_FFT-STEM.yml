@@ -1,4 +1,4 @@
-name: SAFMN_FFT_STEM_p240b8_ct46com36poi48g15_1e-5lr
+name: SAFMN_FFT_STEM_p240b8_ct46com36poi48g15_1e-5lr_dddbg
 model_type: RealTEMSRModel
 scale: 1
 num_gpu: 1

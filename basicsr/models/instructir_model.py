@@ -58,7 +58,14 @@ class InstructIRModel(BaseModel):       # 继承于BaseModel，BaseModel提供�
             self.cri_pix = build_loss(train_opt['pixel_opt']).to(self.device)  # build_loss根据yml中的loss类型和参数，实例化loss类
         else:
             self.cri_pix = None
-
+        if train_opt.get('fft_opt'):
+            self.cri_fft = build_loss(train_opt['fft_opt']).to(self.device)
+        else:
+            self.cri_fft = None
+        if train_opt.get('cx_opt'):
+            self.cri_cx = build_loss(train_opt['cx_opt']).to(self.device)
+        else:
+            self.cri_cx = None
         if train_opt.get('perceptual_opt'):
             self.cri_perceptual = build_loss(train_opt['perceptual_opt']).to(self.device)
         else:
@@ -111,6 +118,16 @@ class InstructIRModel(BaseModel):       # 继承于BaseModel，BaseModel提供�
             if l_style is not None:
                 l_total += l_style
                 loss_dict['l_style'] = l_style
+        # fft loss
+        if self.cri_fft:
+            l_fft = self.cri_fft(self.output, self.gt)
+            l_total += l_fft
+            loss_dict['l_fft'] = l_fft
+        # cx loss
+        if self.cri_cx:
+            l_cx = self.cri_cx(self.output, self.gt)
+            l_total += l_cx
+            loss_dict['l_cx'] = l_cx
 
         l_total.backward()
         self.optimizer_g.step()

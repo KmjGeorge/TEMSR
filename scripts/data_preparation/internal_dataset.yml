@@ -1,6 +1,0 @@
-manual_seed: 10
-img_path: D:/Datasets/TEMPatch for SR/1/Orignal/1.png
-save_path: D:/Datasets/TEMPatch for SR/1/Internal
-scale: 2
-crop_size: 128
-iter: 1

@@ -12,10 +12,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from transformers import DistilBertModel, DistilBertTokenizer, AutoModel, AutoTokenizer
 import os
-import json
 
-os.environ["http_proxy"] = "http://127.0.0.1:7890"
-os.environ["https_proxy"] = "http://127.0.0.1:7890"
+
 
 def mean_pooling(model_output, attention_mask):
     token_embeddings = model_output[0]  # First element of model_output contains all token embeddings
@@ -76,19 +74,21 @@ class InstructIRDataset(data.Dataset):
     def __init__(self, opt):
         super(InstructIRDataset, self).__init__()
         self.opt = opt
+        os.environ["http_proxy"] = self.opt['http_proxy']
+        os.environ["https_proxy"] = self.opt['http_proxy']
         # file client (io backend)
         self.file_client = None
         self.io_backend_opt = opt['io_backend']
         self.mean = opt['mean'] if 'mean' in opt else None
         self.std = opt['std'] if 'std' in opt else None
 
-        # meta_info : <lq_path> <gt_path> <class> for train; <lq_path> <gt_path> <instruct> <class> for validation
+        # meta_info : <lq_path> <gt_path> <instruct> <class>
         self.meta_info = pd.read_csv(opt['meta_info'])
         self.gt_paths, self.lq_paths, self.classes = self.meta_info['gt_path'], self.meta_info['lq_path'], self.meta_info['class']
 
-        # instruct file: <instruct> <class> for train
-        if opt.get('instruct_file_path'):
-            self.instruct_data = pd.read_csv(opt['instruct_file_path'])
+        # # instruct file: <instruct> <class>
+        # if opt.get('instruct_file_path'):
+        #     self.instruct_data = pd.read_csv(opt['instruct_file_path'])
 
         self.embedding_model = LanguageModel('TaylorAI/bge-micro-v2').eval()
         self.lm_head = LMHead(embedding_dim=384, hidden_dim=256, num_classes=5).eval()
@@ -111,13 +111,10 @@ class InstructIRDataset(data.Dataset):
         img_lq = imfrombytes(img_bytes, float32=True)
 
         lq_cls = self.classes[index]
-        # if training stage, randomly choose a prompt of the corresponding class
-        if self.opt['phase'] == 'train':
-            lq_instruct = random.choice(list(self.instruct_data[self.instruct_data['class'] == lq_cls]['instruct']))
-        else:
-            lq_instruct = self.meta_info['instruct'][index]
 
-        ###
+        lq_instruct = self.meta_info['instruct'][index]
+
+        ### here
         if 'TEM ' in lq_instruct:
             lq_instruct = lq_instruct.replace('TEM ', 'STEM ')
 
