@@ -1,4 +1,4 @@
-name: SAFMN_FFT_STEM(from sim offline)_p224b8
+name: SAFMN_FFT_STEM(from sim offline)_p224b8_envtest
 model_type: SRModel
 scale: 1
 num_gpu: 1

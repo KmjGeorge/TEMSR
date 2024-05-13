@@ -14,7 +14,6 @@ from transformers import DistilBertModel, DistilBertTokenizer, AutoModel, AutoTo
 import os
 
 
-
 def mean_pooling(model_output, attention_mask):
     token_embeddings = model_output[0]  # First element of model_output contains all token embeddings
     input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()

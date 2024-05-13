@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import cv2
 import numpy as np
 import numpy.random
-import tifffile as tiff
+import tiffile as tiff
 import torchvision.io
 from torch import Tensor
 from torchvision.io import ImageReadMode
