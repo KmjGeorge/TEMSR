@@ -12,10 +12,11 @@ datasets:
     type: InstructIRDataset
     phase: train
     color: gray
-    http_proxy: http://localhost:7890  # for hugging face connection
+    # http_proxy: http://localhost:7890  # for hugging face connection
+    lm_path: F:/github/TEMSR/models/bge-micro-v2
     meta_info: F:/Datasets/InstructTEMSR/meta_info_train.csv
     # instruct_file_path: ~
-    lm_head_weight_path: F:/Project/InstructIR-main/models/ft/model_head_60.pth
+    lm_head_weight_path: F:/github/TEMSR/models/lm_head/model_head_60.pth
     io_backend:
       type: disk
     gt_size: 256
@@ -33,10 +34,10 @@ datasets:
     name: SimReSe2_Val
     type: InstructIRDataset
     phase: val
-    http_proxy: http://localhost:7890
+    lm_path: F:/github/TEMSR/models/bge-micro-v2
     color: gray
     meta_info: F:/Datasets/InstructTEMSR/meta_info_val.csv
-    lm_head_weight_path: F:/Project/InstructIR-main/models/ft/model_head_60.pth
+    lm_head_weight_path: F:/github/TEMSR/models/lm_head/model_head_60.pth
     io_backend:
       type: disk
 

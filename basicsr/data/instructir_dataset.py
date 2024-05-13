@@ -21,7 +21,7 @@ def mean_pooling(model_output, attention_mask):
 
 
 class LanguageModel(nn.Module):
-    def __init__(self, model='TaylorAI/bge-micro-v2'):
+    def __init__(self, model='../models/bge-micro-v2'):
         super(LanguageModel, self).__init__()
 
         self.tokenizer = AutoTokenizer.from_pretrained(model)
@@ -89,7 +89,7 @@ class InstructIRDataset(data.Dataset):
         # if opt.get('instruct_file_path'):
         #     self.instruct_data = pd.read_csv(opt['instruct_file_path'])
 
-        self.embedding_model = LanguageModel('TaylorAI/bge-micro-v2').eval()
+        self.embedding_model = LanguageModel(self.opt['lm_path']).eval()
         self.lm_head = LMHead(embedding_dim=384, hidden_dim=256, num_classes=5).eval()
         self.lm_head.load_state_dict(torch.load(opt['lm_head_weight_path']))
 
