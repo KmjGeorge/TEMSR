@@ -1016,12 +1016,14 @@ if __name__ == '__main__':
     setup_seed(12345)
     with open('./deg_params/params_all.json', 'r') as f:
         params = json.load(f)
-
-    make_deg_folder(n_thread=8, orig_folder='F:\Datasets\InstructTEMSR\All_GT\SimReSe2 rot',
-                    save_gt_folder='F:\Datasets\InstructTEMSR\Enhancement\GT\SimReSe2',
-                    save_lq_folder='F:\Datasets\InstructTEMSR\Enhancemen\LQ\SimReSe2',
+    name = 'TEMImageNet'
+    task = 'Enhancement'
+    mode = 'all'
+    make_deg_folder(n_thread=8, orig_folder='F:\Datasets\InstructTEMSR\All_GT\{}'.format(name),
+                    save_gt_folder='F:\Datasets\InstructTEMSR\{}\GT\{}'.format(task, name),
+                    save_lq_folder='F:\Datasets\InstructTEMSR\{}\LQ\{}'.format(task, name),
                     repeats=1,
-                    mode='ll',
+                    mode=mode,
                     params=params)
 
     '''

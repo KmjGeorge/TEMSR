@@ -113,17 +113,6 @@ class InstructIRDataset(data.Dataset):
 
         lq_instruct = self.meta_info['instruct'][index]
 
-        ### here
-        if 'TEM ' in lq_instruct:
-            lq_instruct = lq_instruct.replace('TEM ', 'STEM ')
-
-        if 'MoS2' in lq_instruct:
-            lq_instruct = lq_instruct.replace('MoS2', 'ReSe2')
-
-        if 'ReS2' in lq_instruct:
-            lq_instruct = lq_instruct.replace('ReS2', 'ReSe2')
-        ###
-
 
         with torch.no_grad():
             instruct_embd, _ = self.lm_head(self.embedding_model(lq_instruct))
