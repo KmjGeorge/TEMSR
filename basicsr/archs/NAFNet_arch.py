@@ -237,6 +237,6 @@ if __name__ == '__main__':
     net = NAFNet(img_channel=img_channel, width=width, middle_blk_num=middle_blk_num,
                  enc_blk_nums=enc_blks, dec_blk_nums=dec_blks).cuda()
 
-    inp_shape = (1, 256, 256)
+    inp_shape = (1, 224, 224)
     summary(net, inp_shape)
 

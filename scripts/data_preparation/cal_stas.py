@@ -5,18 +5,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import os
-
-single_gt_path = 'G:\datasets\STEM ReSe2\ReSe2\singlelayer\GT\\full'
-single_lq_path = 'G:\datasets\STEM ReSe2\ReSe2\singlelayer\LQ\\full'
-double_gt_path = 'G:\datasets\STEM ReSe2\ReSe2\doublelayer\GT\\full'
-double_lq_path = 'G:\datasets\STEM ReSe2\ReSe2\doublelayer\LQ\\full'
-
+from tqdm import tqdm
 
 def z_score(image):
     mean = image.mean()
     std = image.std()
     return (image - mean) / std
-
 
 def adaptive_histogram_equalization(image, tile_grid_size=(8, 8)):
     """
@@ -95,12 +89,18 @@ def histogram_clahe(image):
 def calucale_mean_std(path):
     mean = 0
     var = 0
-    length = len(os.listdir(path))
-    for filename in os.listdir(path):
-        img = tiffile.imread(os.path.join(path, filename))
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) / 255.0
-        mean += img.mean()
-        var += img.var()
+    length = 0
+    folder = ['MoS2', 'ReS2', 'ReSe2', 'warwick']
+    for i in range(4):
+        length += len(os.listdir(os.path.join(path, folder[i])))
+        for filename in tqdm(os.listdir(os.path.join(path, folder[i]))):
+            if '.tif' in filename:
+                img = tiffile.imread(os.path.join(path, folder[i], filename))
+                img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) / 255.0
+            else:
+                img = cv2.imread(os.path.join(path, folder[i], filename), 0) / 255.0
+            mean += img.mean()
+            var += img.var()
     mean /= length
     var /= length
     std = np.sqrt(var)
@@ -110,9 +110,12 @@ def calucale_mean_std(path):
 def draw_avg_histogram(path, title, save_fig_path=None):
     hist_acc = 0
     length = len(os.listdir(path))
-    for filename in os.listdir(path):
-        img = tiffile.imread(os.path.join(path, filename))
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    for filename in tqdm(os.listdir(path)):
+        if '.tif' in filename:
+            img = tiffile.imread(os.path.join(path, filename))
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        else:
+            img = cv2.imread(os.path.join(path, filename), 0)
         hist, _ = np.histogram(img.flatten(), 256, range=(0, 256))
         hist_acc += hist
     avg_hist = hist_acc / length
@@ -128,15 +131,11 @@ def draw_avg_histogram(path, title, save_fig_path=None):
 
 
 if __name__ == "__main__":
+    path = 'F:\\Datasets\\STEMEXP'
+    mean, std = calucale_mean_std(path)
+    print('mean=', mean, 'std=', std)
+    # draw_avg_histogram(path, 'Atom Crops', 'F:\Datasets\partial-STEM_full_size\\atom_crop_hist.png')
 
-    mean, std = calucale_mean_std('G:\datasets\STEM ReSe2\ReSe2\\all_GT')
-    print(mean, std)
-    draw_avg_histogram('G:\datasets\STEM ReSe2\ReSe2\\all_GT', 'All GT', 'G:\datasets\STEM ReSe2\ReSe2\GT_historgram.png')
-
-    mean, std = calucale_mean_std('G:\datasets\STEM ReSe2\ReSe2\\all_LQ')
-    print(mean, std)
-    draw_avg_histogram('G:\datasets\STEM ReSe2\ReSe2\\all_LQ', 'All LQ',
-                       'G:\datasets\STEM ReSe2\ReSe2\LQ_historgram.png')
 
     '''
     image = tiffile.imread('G:\datasets\STEM ReSe2\ReSe2\paired\offset\GT\\2219_GT_x19y2.tif')
