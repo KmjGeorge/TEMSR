@@ -73,24 +73,26 @@ class InstructIRDataset(data.Dataset):
     def __init__(self, opt):
         super(InstructIRDataset, self).__init__()
         self.opt = opt
-        os.environ["http_proxy"] = self.opt['http_proxy']
-        os.environ["https_proxy"] = self.opt['http_proxy']
         # file client (io backend)
         self.file_client = None
         self.io_backend_opt = opt['io_backend']
         self.mean = opt['mean'] if 'mean' in opt else None
         self.std = opt['std'] if 'std' in opt else None
 
-        # meta_info : <lq_path> <gt_path> <instruct> <class>
+        # meta_info : <lq_path> <gt_path> <class> for train      <lq_path> <gt_path> <class> <instruct> for val
         self.meta_info = pd.read_csv(opt['meta_info'])
         self.gt_paths, self.lq_paths, self.classes = self.meta_info['gt_path'], self.meta_info['lq_path'], self.meta_info['class']
 
-        # # instruct file: <instruct> <class>
-        # if opt.get('instruct_file_path'):
-        #     self.instruct_data = pd.read_csv(opt['instruct_file_path'])
+        # instruct file: <instruct> <class>
+        if opt.get('instruct_meta_info'):
+            instruct_data = pd.read_csv(opt['instruct_meta_info'])
+            self.instructs_denoise = instruct_data[instruct_data['class'] == 'Denoise']['instruct']
+            self.instructs_deblur = instruct_data[instruct_data['class'] == 'Deblur']['instruct']
+            self.instructs_LLIE = instruct_data[instruct_data['class'] == 'LLIE']['instruct']
+            self.instructs_segmentation = instruct_data[instruct_data['class'] == 'Segmentation']['instruct']
 
         self.embedding_model = LanguageModel(self.opt['lm_path']).eval()
-        self.lm_head = LMHead(embedding_dim=384, hidden_dim=256, num_classes=5).eval()
+        self.lm_head = LMHead(embedding_dim=384, hidden_dim=512, num_classes=4).eval()
         self.lm_head.load_state_dict(torch.load(opt['lm_head_weight_path']))
 
     def __getitem__(self, index):
@@ -101,22 +103,31 @@ class InstructIRDataset(data.Dataset):
 
         # Load gt and lq images. Dimension order: HWC; channel order: BGR;
         # image range: [0, 1], float32.
-        gt_path = self.gt_paths[index]
+        root = self.opt['dataset_root']
+        gt_path = os.path.join(root, self.gt_paths[index])
+        lq_path = os.path.join(root, self.lq_paths[index])
         img_bytes = self.file_client.get(gt_path, 'gt')
         img_gt = imfrombytes(img_bytes, float32=True)
-        lq_path = self.lq_paths[index]
 
         img_bytes = self.file_client.get(lq_path, 'lq')
         img_lq = imfrombytes(img_bytes, float32=True)
 
         lq_cls = self.classes[index]
-
-        lq_instruct = self.meta_info['instruct'][index]
-
+        if self.opt['phase'] == 'train':
+            if lq_cls == 'Denoise':
+                lq_instruct = np.random.choice(self.instructs_denoise, 1, replace=False)[0]
+            elif lq_cls == 'Deblur':
+                lq_instruct = np.random.choice(self.instructs_deblur, 1, replace=False)[0]
+            elif lq_cls == 'LLIE':
+                lq_instruct = np.random.choice(self.instructs_LLIE, 1, replace=False)[0]
+            elif lq_cls == 'Segmentation':
+                lq_instruct = np.random.choice(self.instructs_segmentation, 1, replace=False)[0]
+        else:
+            lq_instruct = self.meta_info['instruct'][index]
 
         with torch.no_grad():
             instruct_embd, _ = self.lm_head(self.embedding_model(lq_instruct))
-        instruct_embd.squeeze_()   # (256,)
+        instruct_embd.squeeze_()   # (dim,)
         # augmentation for training
         if self.opt['phase'] == 'train':
             gt_size = self.opt['gt_size']

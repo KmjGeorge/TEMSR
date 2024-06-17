@@ -3,6 +3,7 @@ from collections import OrderedDict
 from os import path as osp
 
 from matplotlib import pyplot as plt
+from torch import nn
 from tqdm import tqdm
 
 from basicsr.archs import build_network
@@ -11,13 +12,13 @@ from basicsr.metrics import calculate_metric
 from basicsr.utils import get_root_logger, imwrite, tensor2img
 from basicsr.utils.registry import MODEL_REGISTRY
 from .base_model import BaseModel
-
-
+from basicsr.archs.vit_arch import vit_base_patch16_gray
 @MODEL_REGISTRY.register()
-class InstructIRModel(BaseModel):
+class SRModelwithMAE(BaseModel):
+    """Base SR model for single image super-resolution."""
 
     def __init__(self, opt):
-        super(InstructIRModel, self).__init__(opt)
+        super(SRModelwithMAE, self).__init__(opt)
         # define network
         self.net_g = build_network(opt['network_g'])
         self.net_g = self.model_to_device(self.net_g)
@@ -25,11 +26,17 @@ class InstructIRModel(BaseModel):
 
         # load pretrained models
         load_path = self.opt['path'].get('pretrain_network_g', None)
+        mae_path = self.opt['network_mae'].get('pretrained_weights', None)
+        assert mae_path
+        self.net_mae = vit_base_patch16_gray(mode=opt['network_mae'].get('mode', 'pool'))
+        self.net_mae = self.net_mae.to(self.device).eval()
+        self.net_mae.load_state_dict(torch.load(mae_path)['model'], strict=False)
+
         if load_path is not None:
             param_key = self.opt['path'].get('param_key_g', 'params')
             self.load_network(self.net_g, load_path, self.opt['path'].get('strict_load_g', True), param_key)
 
-        if self.is_train:   # 初始化相关设置
+        if self.is_train:
             self.init_training_settings()
 
     def init_training_settings(self):
@@ -70,8 +77,8 @@ class InstructIRModel(BaseModel):
         else:
             self.cri_perceptual = None
 
-        if self.cri_pix is None and self.cri_perceptual is None:
-            raise ValueError('Both pixel and perceptual losses are None.')
+        # if self.cri_pix is None and self.cri_perceptual is None:
+        #     raise ValueError('Both pixel and perceptual losses are None.')
 
         # set up optimizers and schedulers
         self.setup_optimizers()
@@ -92,14 +99,14 @@ class InstructIRModel(BaseModel):
 
     def feed_data(self, data):
         self.lq = data['lq'].to(self.device)
-        self.instruct_embd = data['instruct_embd'].to(self.device)
-        self.instruct_cls = data['instruct_cls']
+        with torch.no_grad():
+            self.lq_feature = self.net_mae(self.lq)
         if 'gt' in data:
             self.gt = data['gt'].to(self.device)
 
     def optimize_parameters(self, current_iter):
         self.optimizer_g.zero_grad()
-        self.output = self.net_g(self.lq, self.instruct_embd)
+        self.output = self.net_g(self.lq, self.lq_feature)
 
         l_total = 0
         loss_dict = OrderedDict()
@@ -129,6 +136,7 @@ class InstructIRModel(BaseModel):
             loss_dict['l_cx'] = l_cx
 
         l_total.backward()
+
         self.optimizer_g.step()
 
         self.log_dict = self.reduce_loss_dict(loss_dict)
@@ -140,11 +148,11 @@ class InstructIRModel(BaseModel):
         if hasattr(self, 'net_g_ema'):
             self.net_g_ema.eval()
             with torch.no_grad():
-                self.output = self.net_g_ema(self.lq, self.instruct_embd)
+                self.output = self.net_g_ema(self.lq, self.lq_feature)
         else:
             self.net_g.eval()
             with torch.no_grad():
-                self.output = self.net_g(self.lq, self.instruct_embd)
+                self.output = self.net_g(self.lq, self.lq_feature)
             self.net_g.train()
 
     def test_selfensemble(self):
@@ -219,10 +227,10 @@ class InstructIRModel(BaseModel):
 
         for idx, val_data in enumerate(dataloader):
             img_name = osp.splitext(osp.basename(val_data['lq_path'][0]))[0]
-            self.feed_data(val_data)  # 喂测试数据
-            self.test()  # 测试
+            self.feed_data(val_data)
+            self.test()
 
-            visuals = self.get_current_visuals()  # 获取测试结果
+            visuals = self.get_current_visuals()
             sr_img = tensor2img([visuals['result']])
             metric_data['img'] = sr_img
             if 'gt' in visuals:
@@ -257,7 +265,7 @@ class InstructIRModel(BaseModel):
         if use_pbar:
             pbar.close()
 
-        if with_metrics:   # 用于显示metrics的结果
+        if with_metrics:
             for metric in self.metric_results.keys():
                 self.metric_results[metric] /= (idx + 1)
                 # update the best metric result

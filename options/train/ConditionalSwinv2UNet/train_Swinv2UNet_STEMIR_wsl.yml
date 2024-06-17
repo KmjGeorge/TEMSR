@@ -1,5 +1,5 @@
-name: InstructIR_p256b4
-model_type: InstructIRModel
+name: CSwinUNet_p256w16b16_2gpu_nofreeze
+model_type: SwinUNetModel
 scale: 1
 num_gpu: 1
 manual_seed: 12345
@@ -12,10 +12,11 @@ datasets:
     type: InstructIRDataset
     phase: train
     color: gray
-    meta_info: /mnt/f/datasets/InstructTEMSR/new/meta_info_train.csv
-    instruct_meta_path: /mnt/f/Datasets/InstructTEMSR/new/prompt_gpt4o 612613614.csv
-    lm_path: ../models/bge-micro-v2
-    lm_head_weight_path: ../models/lm_head/model_head_20.pth
+    dataset_root: /mnt/f/datasets/InstructSTEMIR
+    meta_info: /mnt/f/datasets/InstructSTEMIR/meta_info_train.csv
+    instruct_meta_info: /mnt/f/Datasets/InstructSTEMIR/instructs.csv
+    lm_path: ./models/bge-micro-v2
+    lm_head_weight_path: ./models/lm_head/model_head_512_epoch40.pth
     io_backend:
       type: disk
     gt_size: 256
@@ -24,7 +25,7 @@ datasets:
 
     # data loader
     num_worker_per_gpu: 4
-    batch_size_per_gpu: 4
+    batch_size_per_gpu: 16
     dataset_enlarge_ratio: 20
     prefetch_mode: cuda
     pin_memory: true
@@ -34,25 +35,38 @@ datasets:
     type: InstructIRDataset
     phase: val
     color: gray
-    meta_info: mnt/f/Datasets/InstructTEMSR/meta_info_val.csv
-    lm_head_weight_path:  ../models/lm_head/model_head_20.pth
-    lm_path: ../models/bge-micro-v2
+    dataset_root: /mnt/f/datasets/InstructSTEMIR
+    meta_info: /mnt/f/datasets/InstructSTEMIR/meta_info_val.csv
+    lm_head_weight_path: ./models/lm_head/model_head_512_epoch40.pth
+    lm_path: ./models/bge-micro-v2
     io_backend:
       type: disk
 
 
 network_g:
-  type: InstructIR
-  img_channel: 1
-  width: 32
-  enc_blk_nums: [2,2,4,8]
-  middle_blk_num: 4
-  dec_blk_nums: [2,2,2,2]
-  txtdim: 256
+  type: ConditionalSwinv2UNet
+  img_size: 256
+  patch_size: 4
+  in_chans: 1
+  num_classes: 1
+  embed_dim: 128
+  depths: [2, 2, 18, 2]
+  depths_decoder: [2, 2, 2, 2]
+  num_heads: [4, 8, 16, 32]
+  window_size: 16
+  mlp_ratio: 4
+  qkv_bias: True
+  drop_rate: 0
+  drop_path_rate: 0.1
+  ape: False
+  patch_norm: True
+  freeze_encoder: False
+
 
 # path
 path:
-  pretrain_network_g: ~
+  pretrain_network_g: ./models/swinv2/ckpt_epoch_70.pth
+  param_key_g: model
   strict_load_g: true
   resume_state: ~
 
@@ -65,11 +79,10 @@ train:
     betas: [0.9, 0.99]
 
   scheduler:
-    type: CosineAnnealingRestartLR
-    periods: [150000]
-    restart_weights: [1]
-    eta_min: !!float 1e-6
-  total_iter: 150000
+    type: MultiStepLR
+    gamma: 0.5
+    milestones: [50000]
+  total_iter: 50000
   warmup_iter: -1
 
   # losses
@@ -83,7 +96,7 @@ train:
     reduction: mean
 
 val:
- val_freq: !!float 1e4
+ val_freq: !!float 2e3
  save_img: true
  metrics:
    psnr: # metric name
@@ -94,15 +107,12 @@ val:
      type: calculate_ssim
      crop_border: 0
      test_y_channel: false
-#   snr:
-#     type: calculate_snr
-#   tv:
-#     type: calculate_tv
+
 
 # logging settings
 logger:
   print_freq: 1000
-  save_checkpoint_freq: !!float 1e4
+  save_checkpoint_freq: !!float 2e3
   use_tb_logger: true
   wandb:
     project: ~

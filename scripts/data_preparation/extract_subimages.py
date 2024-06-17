@@ -40,13 +40,13 @@ def main():
     """
 
     opt = {}
-    opt['n_thread'] = 1
+    opt['n_thread'] = 8
     opt['compression_level'] = 0
 
     # HR images
-    opt['input_folder'] = 'F:\Datasets\jingjie\ReS2\PECVD-grown Re doped MoS2\\2048'
-    opt['save_folder'] = 'F:\Datasets\jingjie\ReS2\PECVD-grown Re doped MoS2\\2048\\crops'
-    opt['crop_size'] = 512
+    opt['input_folder'] = r'D:\Datasets\cnn\pred\BGNoise'
+    opt['save_folder'] = r'D:\Datasets\STEMEXP256\BGNoise256'
+    opt['crop_size'] = 256
     opt['step'] = 256
     opt['thresh_size'] = 0
     extract_subimages(opt)

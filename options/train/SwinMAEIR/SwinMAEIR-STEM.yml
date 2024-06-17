@@ -1,11 +1,11 @@
-name: NAFNet-1118_2_1111_STEM_p224_b32
+name: SwinMAEIR_STEM_p56b32
 model_type: SRModel
+pretrain_mae_ckpt: /mnt/f/mae-main/output_dir/checkpoint-40.pth
 scale: 1
 num_gpu: 1
 manual_seed: 12345
-
-gt_size: 224
-queue_size: 256
+gt_size: 56
+queue_size: 180
 
 datasets:
   train:
@@ -19,7 +19,7 @@ datasets:
     filename_tmpl: '{}'
     io_backend:
       type: disk
-    gt_size: 224
+    gt_size: 56
     use_hflip: true
     use_rot: true
     # data loader
@@ -32,6 +32,7 @@ datasets:
   val:
     name: TEMImageNet_Denoising
     type: PairedImageDataset
+    use_pbar: true
     color: gray
     dataroot_gt: /mnt/f/Datasets/TEM-ImageNet-v1.3-master/noBackgroundnoNoise/val224
     dataroot_lq: /mnt/f/Datasets/TEM-ImageNet-v1.3-master/image/val224
@@ -40,12 +41,18 @@ datasets:
 
 
 network_g:
-  type: NAFNet
-  width: 32
-  enc_blk_nums: [ 1, 1, 1, 8 ]
-  middle_blk_num: 2
-  dec_blk_nums: [ 1, 1, 1, 1 ]
-  img_channel: 1
+  type: SwinMAEIR
+  window_masking_r: 4
+  upscale: 1
+  img_size: 56
+  window_size: 8
+  img_range: 1.
+  depths: [6, 6, 6, 6, 6, 6]
+  embed_dim: 180
+  num_heads: [6, 6, 6, 6, 6, 6]
+  mlp_ratio: 2
+  upsampler: denoising
+  in_chans: 1
 
 # path
 path:

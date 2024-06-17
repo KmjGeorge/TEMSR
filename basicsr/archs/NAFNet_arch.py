@@ -20,7 +20,6 @@ from basicsr.utils.registry import ARCH_REGISTRY
 
 
 class LayerNormFunction(torch.autograd.Function):
-
     @staticmethod
     def forward(ctx, x, weight, bias, eps):
         ctx.eps = eps
@@ -224,19 +223,24 @@ class NAFNetLocal(Local_Base, NAFNet):
 if __name__ == '__main__':
     from torchsummary import summary
     img_channel = 1
-    width = 32
+    width = 64
 
-    # enc_blks = [2, 2, 4, 8]
-    # middle_blk_num = 12
-    # dec_blks = [2, 2, 2, 2]
+    enc_blks = [2, 2, 4, 8]
+    middle_blk_num = 12
+    dec_blks = [2, 2, 2, 2]
 
-    enc_blks = [1, 1, 1, 8]
-    middle_blk_num = 1
-    dec_blks = [1, 1, 1, 1]
+    # enc_blks = [1, 1, 1, 8]
+    # middle_blk_num = 2
+    # dec_blks = [1, 1, 1, 1]
 
     net = NAFNet(img_channel=img_channel, width=width, middle_blk_num=middle_blk_num,
                  enc_blk_nums=enc_blks, dec_blk_nums=dec_blks).cuda()
 
-    inp_shape = (1, 224, 224)
-    summary(net, inp_shape)
+    inp_shape = (1, 256, 256)
+    summary(net, inp_shape)      # 1118 2 1111, Total params:   9,611,105
+                                 # 2248 12 2222 Total params: 115,941,185
+    # for i in range(100):
+    #     x = torch.randn(2, 1, 256, 256).cuda()
+    #     out = net(x)
+
 

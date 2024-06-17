@@ -947,7 +947,7 @@ if __name__ == '__main__':
         embed_dim=60,
         num_heads=[6, 6, 6, 6],
         mlp_ratio=2,
-        upsampler='pixelshuffledirect')
+        upsampler='1')
     print(model)
     print(height, width, model.flops() / 1e9)
 

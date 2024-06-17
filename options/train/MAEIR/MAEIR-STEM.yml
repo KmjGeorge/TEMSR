@@ -1,6 +1,5 @@
-name: MAEIR_STEM_dim384depth4_p224_b32_unpatchifiedLoss
-model_type: MAEIRModel
-pretrain_mae_ckpt: /mnt/f/Project/mae-main/output_dir/checkpoint-80.pth
+name: MAEIR_STEM_dim512NAF1111_p224_b32
+model_type: SRModel
 scale: 1
 num_gpu: 1
 manual_seed: 12345
@@ -47,15 +46,15 @@ network_g:
   embed_dim: 1024
   depth: 24
   num_heads: 16
-  decoder_embed_dim: 384
-  decoder_num_heads: 16
-  decoder_depth: 4
+  decoder_embed_dim: 512
+  decoder_blks: [1, 1, 1, 1]
   mlp_ratio: 4
 
 # path
 path:
-  pretrain_network_g: ~
-  strict_load_g: true
+  pretrain_network_g: /mnt/f/Project/mae-main/output_dir/mae_large/checkpoint-80.pth
+  param_key_g: model
+  strict_load_g: false
   resume_state: ~
 
 # training settings

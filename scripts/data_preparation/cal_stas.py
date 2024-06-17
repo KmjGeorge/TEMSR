@@ -90,8 +90,9 @@ def calucale_mean_std(path):
     mean = 0
     var = 0
     length = 0
-    folder = ['MoS2', 'ReS2', 'ReSe2', 'warwick']
-    for i in range(4):
+    # folder = ['MoS2', 'ReS2', 'ReSe2', 'warwick_DF']
+    folder = ['']
+    for i in range(len(folder)):
         length += len(os.listdir(os.path.join(path, folder[i])))
         for filename in tqdm(os.listdir(os.path.join(path, folder[i]))):
             if '.tif' in filename:
@@ -131,7 +132,7 @@ def draw_avg_histogram(path, title, save_fig_path=None):
 
 
 if __name__ == "__main__":
-    path = 'F:\\Datasets\\STEMEXP'
+    path = r'D:\Datasets\STEMEXP256\all'
     mean, std = calucale_mean_std(path)
     print('mean=', mean, 'std=', std)
     # draw_avg_histogram(path, 'Atom Crops', 'F:\Datasets\partial-STEM_full_size\\atom_crop_hist.png')

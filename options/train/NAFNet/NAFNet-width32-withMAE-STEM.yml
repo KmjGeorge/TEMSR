@@ -1,27 +1,25 @@
-name: NAFNet-1118_2_1111_STEM_p224_b32
-model_type: SRModel
+name: NAFNet-1118_1_1111-withMAE-STEM_p224_b32
+model_type: SRModelwithMAE
 scale: 1
 num_gpu: 1
 manual_seed: 12345
 
 gt_size: 224
-queue_size: 256
 
 datasets:
   train:
     name: TEMImageNet_Denoising
     type: PairedImageDataset
+    phase: train
     color: gray
     dataroot_gt: /mnt/f/Datasets/TEM-ImageNet-v1.3-master/noBackgroundnoNoise/train
     dataroot_lq: /mnt/f/Datasets/TEM-ImageNet-v1.3-master/image/train
-    meta_info: ~
-
-    filename_tmpl: '{}'
     io_backend:
       type: disk
     gt_size: 224
     use_hflip: true
     use_rot: true
+
     # data loader
     num_worker_per_gpu: 4
     batch_size_per_gpu: 16
@@ -32,6 +30,7 @@ datasets:
   val:
     name: TEMImageNet_Denoising
     type: PairedImageDataset
+    phase: val
     color: gray
     dataroot_gt: /mnt/f/Datasets/TEM-ImageNet-v1.3-master/noBackgroundnoNoise/val224
     dataroot_lq: /mnt/f/Datasets/TEM-ImageNet-v1.3-master/image/val224
@@ -40,18 +39,23 @@ datasets:
 
 
 network_g:
-  type: NAFNet
+  type: InstructIR
   width: 32
   enc_blk_nums: [ 1, 1, 1, 8 ]
-  middle_blk_num: 2
+  middle_blk_num: 1
   dec_blk_nums: [ 1, 1, 1, 1 ]
   img_channel: 1
+  txtdim: 768
+
+network_mae:
+  pretrained_weights: /mnt/f/Project/mae-main/output_dir/mae_base(DF)/checkpoint-99.pth
+  mode: pool
 
 # path
 path:
   pretrain_network_g: ~
   strict_load_g: true
-  resume_state: ~
+  resume_state: /mnt/f/github/TEMSR/experiments/NAFNet-1118_1_1111-withMAE-STEM_p224_b32/training_states/20000.state
 
 # training settings
 train:
@@ -93,7 +97,7 @@ val:
 
 # logging settings
 logger:
-  print_freq: 1000
+  print_freq: 100
   save_checkpoint_freq: !!float 1e4
   use_tb_logger: true
   wandb:
@@ -104,4 +108,5 @@ logger:
 dist_params:
   backend: nccl
   port: 29500
+
 

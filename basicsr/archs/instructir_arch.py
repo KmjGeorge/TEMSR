@@ -126,6 +126,7 @@ class InstructIR(nn.Module):
 if __name__ == '__main__':
     from torchsummary import summary
 
-    model = InstructIR(img_channel=1, width=32, enc_blk_nums=[2, 2, 4, 8], middle_blk_num=4, dec_blk_nums=[2, 2, 2, 2],
-                       txtdim=256).cuda()
-    summary(model, input_size=[(1, 256, 256), (256,)])
+    model = InstructIR(img_channel=1, width=32, enc_blk_nums=[1, 1, 1, 8], middle_blk_num=1, dec_blk_nums=[1, 1, 1, 1],
+                       txtdim=512).cuda()
+    summary(model, input_size=[(1, 256, 256), (512,)])  # Total params: 9,501,025  32 1118 1 1111
+                                                        # Total params: 30,879,649 32 2228 12 2222

@@ -1,21 +1,18 @@
-import math
-import os
-
 import torch
 import torch.nn as nn
 from timm.models.vision_transformer import PatchEmbed, Block
 from basicsr.utils.registry import ARCH_REGISTRY
 from functools import partial
-from basicsr.archs.NAFNet_arch import NAFBlock
-from einops import rearrange
-@ARCH_REGISTRY.register()
+
+
+# @ARCH_REGISTRY.register()
 class MAEIR(nn.Module):
     """ Vision Transformer with support for global average pooling
     """
 
     def __init__(self, img_size=224, patch_size=16, in_chans=3,
                  embed_dim=1024, depth=24, num_heads=16,
-                 decoder_embed_dim=512, decoder_blks=[1,1,1,1],
+                 decoder_embed_dim=512, decoder_num_heads=16, decoder_depth=8,
                  mlp_ratio=4, norm_layer=partial(nn.LayerNorm, eps=1e-6)):
         super().__init__()
 
@@ -31,30 +28,14 @@ class MAEIR(nn.Module):
             Block(embed_dim, num_heads, mlp_ratio, qkv_bias=True, norm_layer=norm_layer)
             for i in range(depth)])
         self.norm = norm_layer(embed_dim)
-
         # Decoder
         self.decoder_embed = nn.Linear(embed_dim, decoder_embed_dim, bias=True)
-        self.decoder_conv_first = nn.Conv2d(decoder_embed_dim,decoder_embed_dim, 3, 1, 1)
-        chan = decoder_embed_dim
-        self.decoder_blocks = nn.ModuleList()
-        self.decoder_ups = nn.ModuleList()
-        self.decoder_blks = decoder_blks
-        for num in decoder_blks:
-            self.decoder_ups.append(
-                nn.Sequential(
-                    nn.Conv2d(chan, chan * 2, 1, bias=False),
-                    nn.PixelShuffle(2)
-                )
-            )
-            chan = chan // 2
-            self.decoder_blocks.append(
-                nn.Sequential(
-                    *[NAFBlock(chan) for _ in range(num)]
-                )
-            )
-        self.decoder_ending = nn.Conv2d(in_channels=chan, out_channels=in_chans, kernel_size=3, padding=1, stride=1,
-                                groups=1,
-                                bias=True)
+        self.decoder_blocks = nn.ModuleList([
+            Block(decoder_embed_dim, decoder_num_heads, mlp_ratio, qkv_bias=True, norm_layer=norm_layer)
+            for i in range(decoder_depth)])
+
+        self.decoder_norm = norm_layer(decoder_embed_dim)
+        self.decoder_pred = nn.Linear(decoder_embed_dim, patch_size ** 2 * in_chans, bias=True)  # decoder to patch
         self.init_parameters()
 
     def init_parameters(self):  # train decoder only
@@ -78,14 +59,12 @@ class MAEIR(nn.Module):
         return x
 
     def forward_decoder(self, x):
-        x = x[:, 1:, :]  # (N, 196, decoder_embed_dim)
         x = self.decoder_embed(x)
-        x = x.reshape(x.shape[0], -1, int(math.sqrt(x.shape[1])), int(math.sqrt(x.shape[1])))
-        x = self.decoder_conv_first(x)
-        for decoder, up, in zip(self.decoder_blocks, self.decoder_ups):
-            x = up(x)
-            x = decoder(x)
-        x = self.decoder_ending(x)
+        for blk in self.decoder_blocks:
+            x = blk(x)
+        x = self.decoder_norm(x)
+        x = self.decoder_pred(x)
+        x = x[:, 1:, :]  # (196, 256)
         return x
 
     def forward(self, x):
@@ -115,29 +94,23 @@ class MAEIR(nn.Module):
         p = self.patch_embed.patch_size[0]
         h = w = int(x.shape[1] ** .5)
         assert h * w == x.shape[1]
-        x = x.reshape(shape=(x.shape[0], h, w, p, p, -1))
+        x = x.reshape(shape=(x.shape[0], h, w, p, p, self.in_chans))
         x = torch.einsum('nhwpqc->nchpwq', x)
-        imgs = x.reshape(shape=(x.shape[0], -1, h * p, h * p))
+        imgs = x.reshape(shape=(x.shape[0], self.in_chans, h * p, h * p))
         return imgs
 
 
 if __name__ == '__main__':
+    import os
+    os.environ['CUDA_VISIBLE_DEVICES'] = '1'
     model = MAEIR(img_size=224, patch_size=16,
                   in_chans=1,
                   embed_dim=1024,
                   depth=24,
                   num_heads=16,
-                  decoder_embed_dim=512,
-                  decoder_blks=[1, 1, 1, 1],
+                  decoder_embed_dim=384,
+                  decoder_num_heads=16,
+                  decoder_depth=4,
                   mlp_ratio=4).cuda()
     from torchsummary import summary
-    # params = torch.load('F:/Project/mae-main/output_dir/mae_large/checkpoint-80.pth')['model']
-    # for k in list(params.keys()):
-    #     if 'decoder' in k:
-    #         params.pop(k)
-    # msg = model.load_state_dict(params, strict=False)
-    # print(msg)
-    summary(model, input_size=(1, 224, 224))   # decoder 4,205,088
-
-
-
+    summary(model, input_size=(1, 224, 224))

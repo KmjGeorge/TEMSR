@@ -13,11 +13,87 @@ from basicsr.utils.registry import MODEL_REGISTRY
 from .base_model import BaseModel
 
 
+def load_pretrained_swinv2(model, load_path, strict, params_key):
+    checkpoint = torch.load(load_path)
+    state_dict_orig = checkpoint[params_key]
+
+    state_dict = {}
+    for k, v in state_dict_orig.items():
+        if 'encoder' in k:
+            state_dict[k.replace('encoder', 'module')] = v
+
+    del state_dict_orig
+
+    # delete relative_position_index since we always re-init it
+    relative_position_index_keys = [k for k in state_dict.keys() if "relative_position_index" in k]
+    for k in relative_position_index_keys:
+        del state_dict[k]
+
+    # delete relative_coords_table since we always re-init it
+    relative_position_index_keys = [k for k in state_dict.keys() if "relative_coords_table" in k]
+    for k in relative_position_index_keys:
+        del state_dict[k]
+
+    # delete attn_mask since we always re-init it
+    attn_mask_keys = [k for k in state_dict.keys() if "attn_mask" in k]
+    for k in attn_mask_keys:
+        del state_dict[k]
+
+    # bicubic interpolate relative_position_bias_table if not match
+    relative_position_bias_table_keys = [k for k in state_dict.keys() if "relative_position_bias_table" in k]
+    for k in relative_position_bias_table_keys:
+        relative_position_bias_table_pretrained = state_dict[k]
+        relative_position_bias_table_current = model.state_dict()[k]
+        L1, nH1 = relative_position_bias_table_pretrained.size()
+        L2, nH2 = relative_position_bias_table_current.size()
+        if nH1 != nH2:
+            raise f"Error in loading {k}, passing......"
+        else:
+            if L1 != L2:
+                # bicubic interpolate relative_position_bias_table if not match
+
+                S1 = int(L1 ** 0.5)
+                S2 = int(L2 ** 0.5)
+                relative_position_bias_table_pretrained_resized = torch.nn.functional.interpolate(
+                    relative_position_bias_table_pretrained.permute(1, 0).view(1, nH1, S1, S1), size=(S2, S2),
+                    mode='bicubic')
+                state_dict[k] = relative_position_bias_table_pretrained_resized.view(nH2, L2).permute(1, 0)
+                print('relative_position_bias_table has been interpolated from {} to {}'.format(L1, L2))
+    # bicubic interpolate absolute_pos_embed if not match
+    absolute_pos_embed_keys = [k for k in state_dict.keys() if "absolute_pos_embed" in k]
+    for k in absolute_pos_embed_keys:
+        # dpe
+        absolute_pos_embed_pretrained = state_dict[k]
+        absolute_pos_embed_current = model.state_dict()[k]
+        _, L1, C1 = absolute_pos_embed_pretrained.size()
+        _, L2, C2 = absolute_pos_embed_current.size()
+        if C1 != C1:
+            raise f"Error in loading {k}, passing......"
+        else:
+            if L1 != L2:
+                S1 = int(L1 ** 0.5)
+                S2 = int(L2 ** 0.5)
+                absolute_pos_embed_pretrained = absolute_pos_embed_pretrained.reshape(-1, S1, S1, C1)
+                absolute_pos_embed_pretrained = absolute_pos_embed_pretrained.permute(0, 3, 1, 2)
+                absolute_pos_embed_pretrained_resized = torch.nn.functional.interpolate(
+                    absolute_pos_embed_pretrained, size=(S2, S2), mode='bicubic')
+                absolute_pos_embed_pretrained_resized = absolute_pos_embed_pretrained_resized.permute(0, 2, 3, 1)
+                absolute_pos_embed_pretrained_resized = absolute_pos_embed_pretrained_resized.flatten(1, 2)
+                state_dict[k] = absolute_pos_embed_pretrained_resized
+                print('absolute_pos_embed bias has been interpolated from {} to {}'.format(L1, L2))
+
+    # state_dict = OrderedDict(state_dict)
+    model.load_state_dict(state_dict, strict=False)
+    print('Loaded pretrained Swinv2 Backbone')
+    del checkpoint
+    torch.cuda.empty_cache()
+
+
 @MODEL_REGISTRY.register()
-class InstructIRModel(BaseModel):
+class SwinUNetModel(BaseModel):
 
     def __init__(self, opt):
-        super(InstructIRModel, self).__init__(opt)
+        super(SwinUNetModel, self).__init__(opt)
         # define network
         self.net_g = build_network(opt['network_g'])
         self.net_g = self.model_to_device(self.net_g)
@@ -27,9 +103,9 @@ class InstructIRModel(BaseModel):
         load_path = self.opt['path'].get('pretrain_network_g', None)
         if load_path is not None:
             param_key = self.opt['path'].get('param_key_g', 'params')
-            self.load_network(self.net_g, load_path, self.opt['path'].get('strict_load_g', True), param_key)
+            load_pretrained_swinv2(self.net_g, load_path, False, param_key)
 
-        if self.is_train:   # 初始化相关设置
+        if self.is_train:  # 初始化相关设置
             self.init_training_settings()
 
     def init_training_settings(self):
@@ -133,10 +209,10 @@ class InstructIRModel(BaseModel):
 
         self.log_dict = self.reduce_loss_dict(loss_dict)
 
-        if self.ema_decay > 0:     # 使用EMA
+        if self.ema_decay > 0:  # 使用EMA
             self.model_ema(decay=self.ema_decay)
 
-    def test(self):   # 定义测试流程
+    def test(self):  # 定义测试流程
         if hasattr(self, 'net_g_ema'):
             self.net_g_ema.eval()
             with torch.no_grad():
@@ -257,7 +333,7 @@ class InstructIRModel(BaseModel):
         if use_pbar:
             pbar.close()
 
-        if with_metrics:   # 用于显示metrics的结果
+        if with_metrics:  # 用于显示metrics的结果
             for metric in self.metric_results.keys():
                 self.metric_results[metric] /= (idx + 1)
                 # update the best metric result
