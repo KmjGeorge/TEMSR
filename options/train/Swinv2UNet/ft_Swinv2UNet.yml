@@ -1,0 +1,120 @@
+name: SwinUNet_ft_p256w16b16_TEMImageNet1000denoise
+model_type: SwinUNetModel
+scale: 1
+num_gpu: 1
+manual_seed: 12345
+gt_size: 256
+
+datasets:
+  train:
+    name: TEMImageNet_Denoise_1000
+    type: PairedImageDataset
+    color: gray
+    dataroot_gt: /mnt/f/Datasets/InstructSTEMIR/Denoise/GT/TEMImageNet1000
+    dataroot_lq: /mnt/f/Datasets/InstructSTEMIR/Denoise/LQ/TEMImageNet1000
+    meta_info: ~
+
+    io_backend:
+      type: disk
+    gt_size: 256
+    use_hflip: true
+    use_rot: true
+
+    # data loader
+    num_worker_per_gpu: 3
+    batch_size_per_gpu: 16
+    dataset_enlarge_ratio: 50
+    prefetch_mode: cuda
+    pin_memory: true
+
+  val:
+    name: TEMImageNet_Denoise_val500
+    type: PairedImageDataset
+    color: gray
+    dataroot_gt: /mnt/f/Datasets/InstructSTEMIR/Denoise/GT/TEMImageNet500
+    dataroot_lq: /mnt/f/Datasets/InstructSTEMIR/Denoise/LQ/TEMImageNet500
+    io_backend:
+      type: disk
+
+
+network_g:
+  type: Swinv2UNet
+  img_size: 256
+  patch_size: 4
+  in_chans: 1
+  num_classes: 1
+  embed_dim: 128
+  depths: [2, 2, 18, 2]
+  depths_decoder: [2, 2, 2, 2]
+  num_heads: [4, 8, 16, 32]
+  window_size: 16
+  mlp_ratio: 4
+  qkv_bias: True
+  drop_rate: 0
+  drop_path_rate: 0.1
+  ape: False
+  patch_norm: True
+  freeze_encoder: True
+
+
+# path
+path:
+  pretrain_network_g: ./models/swinv2/ckpt_epoch_70.pth
+  param_key_g: model
+  strict_load_g: False
+  resume_state: ~
+
+# training settings
+train:
+  optim_g:
+    type: AdamW
+    lr: !!float 1e-4
+    weight_decay: 0.
+    betas: [0.9, 0.99]
+
+  scheduler:
+    type: MultiStepLR
+    gamma: 0.5
+    milestones: [10000]
+  total_iter: 20000
+  warmup_iter: -1
+
+  # losses
+  pixel_opt:
+    type: L1Loss
+    loss_weight: 1.0
+    reduction: mean
+  fft_opt:
+    type: FFTLoss
+    loss_weight: 0.01
+    reduction: mean
+
+val:
+ val_freq: !!float 1e3
+ save_img: true
+ metrics:
+   psnr: # metric name
+     type: calculate_psnr
+     crop_border: 0
+     test_y_channel: false
+   ssim:
+     type: calculate_ssim
+     crop_border: 0
+     test_y_channel: false
+
+
+# logging settings
+logger:
+  print_freq: 100
+  save_checkpoint_freq: !!float 1e3
+  use_tb_logger: true
+  wandb:
+    project: ~
+    resume_id: ~
+
+# dist training settings
+dist_params:
+  backend: nccl
+  port: 29500
+
+#  PYTHONPATH="./:${PYTHONPATH}" CUDA_VISIBLE_DEVICES=0,1 python -m torch.distributed.launch --nproc_per_node=2 --master_port=4321 basicsr/train.py -opt options/train/Swinv2UNet/ft_Swinv2UNet.yml --launcher pytorch --debug

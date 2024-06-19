@@ -8,25 +8,6 @@ import torch.nn.functional as F
 from basicsr.utils.registry import ARCH_REGISTRY
 
 
-# Adaptive layernorm
-class AdaLN(nn.Module):
-    def __init__(self, hidden_size):
-        super().__init__()
-        self.norm = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
-        self.adaLN_modulation = nn.Sequential(
-            nn.SiLU(),
-            nn.Linear(hidden_size, 2 * hidden_size, bias=True)
-        )
-        self.hidden_size = hidden_size
-
-    def forward(self, x, c):
-        # print('x shape,  x.shape,  hidden_size', x.shape, c.shape, self.hidden_size)
-        shift, scale = self.adaLN_modulation(c).chunk(2, dim=1)
-        x = self.norm(x)
-        x = x * (1 + scale.unsqueeze(1)) + shift.unsqueeze(1)
-        return x
-
-
 class Mlp(nn.Module):
     def __init__(self, in_features, hidden_features=None, out_features=None, act_layer=nn.GELU, drop=0.):
         super().__init__()
@@ -192,23 +173,6 @@ class WindowAttention(nn.Module):
         x = self.proj_drop(x)
         return x
 
-    def extra_repr(self) -> str:
-        return f'dim={self.dim}, window_size={self.window_size}, ' \
-               f'pretrained_window_size={self.pretrained_window_size}, num_heads={self.num_heads}'
-
-    def flops(self, N):
-        # calculate flops for 1 window with token length of N
-        flops = 0
-        # qkv = self.qkv(x)
-        flops += N * self.dim * 3 * self.dim
-        # attn = (q @ k.transpose(-2, -1))
-        flops += self.num_heads * N * (self.dim // self.num_heads) * N
-        #  x = (attn @ v)
-        flops += self.num_heads * N * N * (self.dim // self.num_heads)
-        # x = self.proj(x)
-        flops += N * self.dim * self.dim
-        return flops
-
 
 class SwinTransformerBlock(nn.Module):
     r""" Swin Transformer Block.
@@ -230,7 +194,7 @@ class SwinTransformerBlock(nn.Module):
     """
 
     def __init__(self, dim, input_resolution, num_heads, window_size=7, shift_size=0,
-                 mlp_ratio=4., qkv_bias=True, drop=0., attn_drop=0., drop_path=0.,
+                 mlp_ratio=4., qkv_bias=True, qk_scale=None, drop=0., attn_drop=0., drop_path=0.,
                  act_layer=nn.GELU, norm_layer=nn.LayerNorm):
         super().__init__()
         self.dim = dim
@@ -338,134 +302,6 @@ class SwinTransformerBlock(nn.Module):
         return flops
 
 
-class ConditionalSwinTransformerBlock(nn.Module):
-    r""" Swin Transformer Block.
-
-    Args:
-        dim (int): Number of input channels.
-        input_resolution (tuple[int]): Input resulotion.
-        num_heads (int): Number of attention heads.
-        window_size (int): Window size.
-        shift_size (int): Shift size for SW-MSA.
-        mlp_ratio (float): Ratio of mlp hidden dim to embedding dim.
-        qkv_bias (bool, optional): If True, add a learnable bias to query, key, value. Default: True
-        qk_scale (float | None, optional): Override default qk scale of head_dim ** -0.5 if set.
-        drop (float, optional): Dropout rate. Default: 0.0
-        attn_drop (float, optional): Attention dropout rate. Default: 0.0
-        drop_path (float, optional): Stochastic depth rate. Default: 0.0
-        act_layer (nn.Module, optional): Activation layer. Default: nn.GELU
-        norm_layer (nn.Module, optional): Normalization layer.  Default: nn.LayerNorm
-    """
-
-    def __init__(self, dim, input_resolution, num_heads, window_size=7, shift_size=0,
-                 mlp_ratio=4., qkv_bias=True, drop=0., attn_drop=0., drop_path=0.,
-                 act_layer=nn.GELU, norm_layer=AdaLN, freeze_encoder=False):
-        super().__init__()
-        self.dim = dim
-        self.input_resolution = input_resolution
-        self.num_heads = num_heads
-        self.window_size = window_size
-        self.shift_size = shift_size
-        self.mlp_ratio = mlp_ratio
-
-        if min(self.input_resolution) <= self.window_size:
-            # if window size is larger than input resolution, we don't partition windows
-            self.shift_size = 0
-            self.window_size = min(self.input_resolution)
-        assert 0 <= self.shift_size < self.window_size, "shift_size must in 0-window_size"
-
-        self.norm1 = norm_layer(dim)
-        self.attn = WindowAttention(
-            dim, window_size=to_2tuple(self.window_size), num_heads=num_heads,
-            qkv_bias=qkv_bias, attn_drop=attn_drop, proj_drop=drop)
-
-        self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
-        self.norm2 = norm_layer(dim)
-        mlp_hidden_dim = int(dim * mlp_ratio)
-        self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
-
-        if self.shift_size > 0:
-            # calculate attention mask for SW-MSA
-            H, W = self.input_resolution
-            img_mask = torch.zeros((1, H, W, 1))  # 1 H W 1
-            h_slices = (slice(0, -self.window_size),
-                        slice(-self.window_size, -self.shift_size),
-                        slice(-self.shift_size, None))
-            w_slices = (slice(0, -self.window_size),
-                        slice(-self.window_size, -self.shift_size),
-                        slice(-self.shift_size, None))
-            cnt = 0
-            for h in h_slices:
-                for w in w_slices:
-                    img_mask[:, h, w, :] = cnt
-                    cnt += 1
-
-            mask_windows = window_partition(img_mask, self.window_size)  # nW, window_size, window_size, 1
-            mask_windows = mask_windows.view(-1, self.window_size * self.window_size)
-            attn_mask = mask_windows.unsqueeze(1) - mask_windows.unsqueeze(2)
-            attn_mask = attn_mask.masked_fill(attn_mask != 0, float(-100.0)).masked_fill(attn_mask == 0, float(0.0))
-        else:
-            attn_mask = None
-        self.register_buffer("attn_mask", attn_mask)
-
-    def forward(self, x, c):
-
-        H, W = self.input_resolution
-        B, L, C = x.shape
-        assert L == H * W, "input feature has wrong size"
-
-        shortcut = x
-        x = self.norm1(x, c)
-        x = x.view(B, H, W, C)
-
-        # cyclic shift
-        if self.shift_size > 0:
-            shifted_x = torch.roll(x, shifts=(-self.shift_size, -self.shift_size), dims=(1, 2))
-        else:
-            shifted_x = x
-
-        # partition windows
-        x_windows = window_partition(shifted_x, self.window_size)  # nW*B, window_size, window_size, C
-        x_windows = x_windows.view(-1, self.window_size * self.window_size, C)  # nW*B, window_size*window_size, C
-
-        # W-MSA/SW-MSA
-        attn_windows = self.attn(x_windows, mask=self.attn_mask)  # nW*B, window_size*window_size, C
-
-        # merge windows
-        attn_windows = attn_windows.view(-1, self.window_size, self.window_size, C)
-        shifted_x = window_reverse(attn_windows, self.window_size, H, W)  # B H' W' C
-
-        # reverse cyclic shift
-        if self.shift_size > 0:
-            x = torch.roll(shifted_x, shifts=(self.shift_size, self.shift_size), dims=(1, 2))
-        else:
-            x = shifted_x
-        x = x.view(B, H * W, C)
-
-        # FFN
-        x = shortcut + self.drop_path(x)
-        x = x + self.drop_path(self.mlp(self.norm2(x, c)))
-
-        return x
-
-    def extra_repr(self) -> str:
-        return f"dim={self.dim}, input_resolution={self.input_resolution}, num_heads={self.num_heads}, " \
-               f"window_size={self.window_size}, shift_size={self.shift_size}, mlp_ratio={self.mlp_ratio}"
-
-    def flops(self):
-        flops = 0
-        H, W = self.input_resolution
-        # norm1
-        flops += self.dim * H * W
-        # W-MSA/SW-MSA
-        nW = H * W / self.window_size / self.window_size
-        flops += nW * self.attn.flops(self.window_size * self.window_size)
-        # mlp
-        flops += 2 * H * W * self.dim * self.dim * self.mlp_ratio
-        # norm2
-        flops += self.dim * H * W
-        return flops
-
 
 class PatchMerging(nn.Module):
     r""" Patch Merging Layer.
@@ -503,7 +339,9 @@ class PatchMerging(nn.Module):
 
         x = self.reduction(x)
         x = self.norm(x)
+
         return x
+
 
     def extra_repr(self) -> str:
         return f"input_resolution={self.input_resolution}, dim={self.dim}"
@@ -537,31 +375,6 @@ class PatchExpand(nn.Module):
         x = x.view(B, -1, C // 4)
         x = self.norm(x)
 
-        return x
-
-
-class ConditionalPatchExpand(nn.Module):
-    def __init__(self, input_resolution, dim, dim_scale=2, cond_dim=512, norm_layer=AdaLN):
-        super().__init__()
-        self.input_resolution = input_resolution
-        self.dim = dim
-        self.expand = nn.Linear(dim, 2 * dim, bias=False) if dim_scale == 2 else nn.Identity()
-        self.norm = AdaLN(dim // dim_scale)
-        self.cond_proj = nn.Linear(cond_dim, dim // dim_scale)
-
-    def forward(self, x, c):
-        """
-        x: B, H*W, C
-        """
-        H, W = self.input_resolution
-        x = self.expand(x)
-        B, L, C = x.shape
-        assert L == H * W, "input feature has wrong size"
-        x = x.view(B, H, W, C)
-        x = rearrange(x, 'b h w (p1 p2 c)-> b (h p1) (w p2) c', p1=2, p2=2, c=C // 4)
-        x = x.view(B, -1, C // 4)
-        c = self.cond_proj(c)
-        x = self.norm(x, c)
         return x
 
 
@@ -629,7 +442,7 @@ class BasicLayer(nn.Module):
                                  num_heads=num_heads, window_size=window_size,
                                  shift_size=0 if (i % 2 == 0) else window_size // 2,
                                  mlp_ratio=mlp_ratio,
-                                 qkv_bias=qkv_bias,
+                                 qkv_bias=qkv_bias, qk_scale=qk_scale,
                                  drop=drop, attn_drop=attn_drop,
                                  drop_path=drop_path[i] if isinstance(drop_path, list) else drop_path,
                                  norm_layer=norm_layer)
@@ -722,66 +535,6 @@ class BasicLayer_up(nn.Module):
         return x
 
 
-class ConditionalBasicLayer_up(nn.Module):
-    """ A basic Swin Transformer layer for one stage.
-
-    Args:
-        dim (int): Number of input channels.
-        input_resolution (tuple[int]): Input resolution.
-        depth (int): Number of blocks.
-        num_heads (int): Number of attention heads.
-        window_size (int): Local window size.
-        mlp_ratio (float): Ratio of mlp hidden dim to embedding dim.
-        qkv_bias (bool, optional): If True, add a learnable bias to query, key, value. Default: True
-        qk_scale (float | None, optional): Override default qk scale of head_dim ** -0.5 if set.
-        drop (float, optional): Dropout rate. Default: 0.0
-        attn_drop (float, optional): Attention dropout rate. Default: 0.0
-        drop_path (float | tuple[float], optional): Stochastic depth rate. Default: 0.0
-        norm_layer (nn.Module, optional): Normalization layer. Default: nn.LayerNorm
-        upsample (nn.Module | None, optional): upsample layer at the end of the layer. Default: None
-        use_checkpoint (bool): Whether to use checkpointing to save memory. Default: False.
-    """
-
-    def __init__(self, dim, input_resolution, depth, num_heads, window_size, cond_dim=512,
-                 mlp_ratio=4., qkv_bias=True, qk_scale=None, drop=0., attn_drop=0.,
-                 drop_path=0., norm_layer=nn.LayerNorm, upsample=None, use_checkpoint=False):
-
-        super().__init__()
-        self.dim = dim
-        self.input_resolution = input_resolution
-        self.depth = depth
-        self.use_checkpoint = use_checkpoint
-        self.cond_proj = nn.Linear(cond_dim, dim)
-        # build blocks
-        self.blocks = nn.ModuleList([
-            ConditionalSwinTransformerBlock(dim=dim, input_resolution=input_resolution,
-                                            num_heads=num_heads, window_size=window_size,
-                                            shift_size=0 if (i % 2 == 0) else window_size // 2,
-                                            mlp_ratio=mlp_ratio,
-                                            qkv_bias=qkv_bias,
-                                            drop=drop, attn_drop=attn_drop,
-                                            drop_path=drop_path[i] if isinstance(drop_path, list) else drop_path,
-                                            norm_layer=AdaLN)
-            for i in range(depth)])
-
-        # patch merging layer
-        if upsample is not None:
-            self.upsample = PatchExpand(input_resolution, dim=dim, dim_scale=2, norm_layer=norm_layer)
-        else:
-            self.upsample = None
-
-    def forward(self, x, c):
-        c = self.cond_proj(c)
-        for blk in self.blocks:
-            if self.use_checkpoint:
-                x = checkpoint.checkpoint(blk, x)
-            else:
-                x = blk(x, c)
-        if self.upsample is not None:
-            x = self.upsample(x)
-        return x
-
-
 class PatchEmbed(nn.Module):
     r""" Image to Patch Embedding
 
@@ -830,7 +583,7 @@ class PatchEmbed(nn.Module):
         return flops
 
 @ARCH_REGISTRY.register()
-class ConditionalSwinv2UNet(nn.Module):
+class Swinv2UNet(nn.Module):
     r""" Swin Transformer
         A PyTorch impl of : `Swin Transformer: Hierarchical Vision Transformer using Shifted Windows`  -
           https://arxiv.org/pdf/2103.14030
@@ -856,14 +609,16 @@ class ConditionalSwinv2UNet(nn.Module):
         use_checkpoint (bool): Whether to use checkpointing to save memory. Default: False
     """
 
-    def __init__(self, img_size=224, patch_size=4, in_chans=3,
+    def __init__(self, img_size=224, patch_size=4, in_chans=3, out_chans=1,
                  embed_dim=96, depths=[2, 2, 2, 2], depths_decoder=[1, 2, 2, 2], num_heads=[3, 6, 12, 24],
                  window_size=7, mlp_ratio=4., qkv_bias=True, qk_scale=None,
                  drop_rate=0., attn_drop_rate=0., drop_path_rate=0.1,
                  norm_layer=nn.LayerNorm, ape=False, patch_norm=True,
-                 use_checkpoint=False, freeze_encoder=False, **kwargs):
+                 use_checkpoint=False, freeze_encoder=True, **kwargs):
         super().__init__()
 
+
+        self.out_chans = out_chans
         self.num_layers = len(depths)
         self.embed_dim = embed_dim
         self.ape = ape
@@ -914,38 +669,38 @@ class ConditionalSwinv2UNet(nn.Module):
         for i_layer in range(self.num_layers):
             concat_linear = nn.Linear(2 * int(embed_dim * 2 ** (self.num_layers - 1 - i_layer)),
                                       int(embed_dim * 2 ** (
-                                              self.num_layers - 1 - i_layer))) if i_layer > 0 else nn.Identity()
+                                                  self.num_layers - 1 - i_layer))) if i_layer > 0 else nn.Identity()
             if i_layer == 0:
                 layer_up = PatchExpand(
                     input_resolution=(patches_resolution[0] // (2 ** (self.num_layers - 1 - i_layer)),
                                       patches_resolution[1] // (2 ** (self.num_layers - 1 - i_layer))),
                     dim=int(embed_dim * 2 ** (self.num_layers - 1 - i_layer)), dim_scale=2, norm_layer=norm_layer)
             else:
-                layer_up = ConditionalBasicLayer_up(dim=int(embed_dim * 2 ** (self.num_layers - 1 - i_layer)),
-                                                    input_resolution=(
-                                                        patches_resolution[0] // (2 ** (self.num_layers - 1 - i_layer)),
-                                                        patches_resolution[1] // (
-                                                                2 ** (self.num_layers - 1 - i_layer))),
-                                                    depth=depths_decoder[(self.num_layers - 1 - i_layer)],
-                                                    num_heads=num_heads[(self.num_layers - 1 - i_layer)],
-                                                    window_size=window_size,
-                                                    mlp_ratio=self.mlp_ratio,
-                                                    qkv_bias=qkv_bias,
-                                                    drop=drop_rate, attn_drop=attn_drop_rate,
-                                                    drop_path=dpr[sum(depths[:(self.num_layers - 1 - i_layer)]):sum(
-                                                        depths[:(self.num_layers - 1 - i_layer) + 1])],
-                                                    norm_layer=norm_layer,
-                                                    upsample=PatchExpand if (i_layer < self.num_layers - 1) else None,
-                                                    use_checkpoint=use_checkpoint)
+                layer_up = BasicLayer_up(dim=int(embed_dim * 2 ** (self.num_layers - 1 - i_layer)),
+                                         input_resolution=(
+                                         patches_resolution[0] // (2 ** (self.num_layers - 1 - i_layer)),
+                                         patches_resolution[1] // (2 ** (self.num_layers - 1 - i_layer))),
+                                         depth=depths[(self.num_layers - 1 - i_layer)],
+                                         num_heads=num_heads[(self.num_layers - 1 - i_layer)],
+                                         window_size=window_size,
+                                         mlp_ratio=self.mlp_ratio,
+                                         qkv_bias=qkv_bias, qk_scale=qk_scale,
+                                         drop=drop_rate, attn_drop=attn_drop_rate,
+                                         drop_path=dpr[sum(depths[:(self.num_layers - 1 - i_layer)]):sum(
+                                             depths[:(self.num_layers - 1 - i_layer) + 1])],
+                                         norm_layer=norm_layer,
+                                         upsample=PatchExpand if (i_layer < self.num_layers - 1) else None,
+                                         use_checkpoint=use_checkpoint)
             self.layers_up.append(layer_up)
             self.concat_back_dim.append(concat_linear)
 
         self.norm = norm_layer(self.num_features)
         self.norm_up = norm_layer(self.embed_dim)
 
+
         self.up = FinalPatchExpand_X4(input_resolution=(img_size // patch_size, img_size // patch_size),
                                       dim_scale=4, dim=embed_dim)
-        self.output = nn.Conv2d(in_channels=embed_dim, out_channels=in_chans, kernel_size=1, bias=False)
+        self.output = nn.Conv2d(in_channels=embed_dim, out_channels=self.out_chans, kernel_size=1, bias=False)
         self.freeze_encoder = freeze_encoder
         self.apply(self._init_weights)
 
@@ -955,11 +710,8 @@ class ConditionalSwinv2UNet(nn.Module):
             if isinstance(m, nn.Linear) and m.bias is not None:
                 nn.init.constant_(m.bias, 0)
         elif isinstance(m, nn.LayerNorm):
-            try:
-                nn.init.constant_(m.bias, 0)
-                nn.init.constant_(m.weight, 1.0)
-            except:
-                pass
+            nn.init.constant_(m.bias, 0)
+            nn.init.constant_(m.weight, 1.0)
         if self.freeze_encoder:
             for k, v in self.named_parameters():
                 if ('layers.' in k) or (k in ['norm.weight', 'norm.bias',
@@ -986,20 +738,19 @@ class ConditionalSwinv2UNet(nn.Module):
         for layer in self.layers:
             x_downsample.append(x)
             x = layer(x)
-
         x = self.norm(x)  # B L C
 
         return x, x_downsample
 
     # Dencoder and Skip connection
-    def forward_up_features(self, x, x_downsample, c):
+    def forward_up_features(self, x, x_downsample):
         for inx, layer_up in enumerate(self.layers_up):
             if inx == 0:
                 x = layer_up(x)
             else:
                 x = torch.cat([x, x_downsample[3 - inx]], -1)
                 x = self.concat_back_dim[inx](x)
-                x = layer_up(x, c)
+                x = layer_up(x)
 
         x = self.norm_up(x)  # B L C
 
@@ -1017,9 +768,9 @@ class ConditionalSwinv2UNet(nn.Module):
 
         return x
 
-    def forward(self, x, c):
+    def forward(self, x):
         x, x_downsample = self.forward_features(x)
-        x = self.forward_up_features(x, x_downsample, c)
+        x = self.forward_up_features(x, x_downsample)
         x = self.up_x4(x)
 
         return x
@@ -1034,29 +785,32 @@ class ConditionalSwinv2UNet(nn.Module):
         return flops
 
 
-
-
 if __name__ == "__main__":
     from torchsummary import summary
-
-    model = ConditionalSwinv2UNet(img_size=256,
+    from basicsr.models.swinunet_model import load_pretrained_swinv2
+    model = Swinv2UNet(img_size=192,
                        patch_size=4,
                        in_chans=1,
-                       num_classes=1,
+                       out_chans=1,
                        embed_dim=128,
                        depths=[2, 2, 18, 2],
                        depths_decoder=[2, 2, 2, 2],
                        num_heads=[4, 8, 16, 32],
-                       window_size=16,
+                       window_size=12,
                        mlp_ratio=4,
                        qkv_bias=True,
                        drop_rate=0,
                        drop_path_rate=0.1,
                        ape=False,
                        patch_norm=True,
-                       freeze_encoder=False).cuda()
-
-    summary(model, [(1, 256, 256), (512,)])   # 13,167,232 for decoder
-                                                       # 79,093,760 for all
-    # for k in model.state_dict().keys():
-    #     print(k)
+                       freeze_encoder=True).cuda()
+    summary(model, (1, 192, 192))
+    weights = torch.load(r'F:\Project\Swin-Transformer-main\output\simmim_pretrain\simmim_pretrain__swinv2_base__img192gray_window12__4e-4_300ep\ckpt_epoch_70.pth')['model']
+    weights_new = {}
+    for k, v in weights.items():
+        if 'encoder' in k:
+            weights_new[k.replace('encoder.', '')] = v
+        else:
+            weights_new[k] = v
+    msg = model.load_state_dict(weights_new, strict=False)
+    print(msg)
