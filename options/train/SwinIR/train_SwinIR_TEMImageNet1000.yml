@@ -1,12 +1,11 @@
-name: SwinUNet_ft_p256w16b8_TEMImageNet1000denoise fft0.02 enlarge10 norm convafterbody_res
-model_type: SwinUNetModel
+# general settings
+name: SwinIR_TEMImageNet1000denoise fft0.02 enlarge10
+model_type: SwinIRModel
 scale: 1
-num_gpu: 1
-manual_seed: 12345
-gt_size: 256
-mean: 0.1682
-std: 0.1582
+num_gpu: auto
+manual_seed: 0
 
+# dataset and data loader settings
 datasets:
   train:
     name: TEMImageNet_Denoise_1000
@@ -15,8 +14,6 @@ datasets:
     dataroot_gt: /mnt/f/Datasets/InstructSTEMIR/Denoise/GT/TEMImageNet1000
     dataroot_lq: /mnt/f/Datasets/InstructSTEMIR/Denoise/LQ/TEMImageNet1000
     meta_info: ~
-    mean: 0.1682
-    std: 0.1582
 
     io_backend:
       type: disk
@@ -25,8 +22,8 @@ datasets:
     use_rot: true
 
     # data loader
-    num_worker_per_gpu: 4
-    batch_size_per_gpu: 8
+    num_worker_per_gpu: 1
+    batch_size_per_gpu: 16
     dataset_enlarge_ratio: 10
     prefetch_mode: cuda
     pin_memory: true
@@ -35,41 +32,30 @@ datasets:
     name: TEMImageNet_Denoise_val500
     type: PairedImageDataset
     color: gray
-    dataroot_gt: /mnt/f/Datasets/InstructSTEMIR/Denoise/GT/TEMImageNet_val500
-    dataroot_lq: /mnt/f/Datasets/InstructSTEMIR/Denoise/LQ/TEMImageNet_val500
+    dataroot_gt: /mnt/f/Datasets/InstructSTEMIR/Denoise/GT/TEMImageNet500
+    dataroot_lq: /mnt/f/Datasets/InstructSTEMIR/Denoise/LQ/TEMImageNet500
     io_backend:
       type: disk
-    mean: 0.1682
-    std: 0.1582
 
-
+# network structures
 network_g:
-  type: Swinv2UNet
-  img_size: 256
-  patch_size: 4
-  in_chans: 1
-  out_chans: 1
-  embed_dim: 128
-  depths: [2, 2, 18, 2]
-  depths_decoder: [2, 2, 2, 2]
-  num_heads: [4, 8, 16, 32]
-  window_size: 16
-  mlp_ratio: 4
-  qkv_bias: True
-  drop_rate: 0
-  drop_path_rate: 0.1
-  ape: False
-  patch_norm: True
-  freeze_encoder: False
-
+  type: SwinIR
+  upscale: 2
+  in_chans: 3
+  img_size: 48
+  window_size: 8
+  img_range: 1.
+  depths: [6, 6, 6, 6]
+  embed_dim: 180
+  num_heads: [6, 6, 6, 6]
+  mlp_ratio: 2
+  upsampler: ''
+  resi_connection: '1conv'
 
 # path
 path:
-  pretrain_network_g_e: ./models/swinv2/ckpt_epoch_70.pth
-  param_key_g_e: model
   pretrain_network_g: ~
-  param_key_g: params
-  strict_load_g: False
+  strict_load_g: true
   resume_state: ~
 
 # training settings
@@ -83,8 +69,8 @@ train:
   scheduler:
     type: MultiStepLR
     gamma: 0.5
-    milestones: [15000]
-  total_iter: 30000
+    milestones: [10000]
+  total_iter: 20000
   warmup_iter: -1
 
   # losses
@@ -124,4 +110,3 @@ logger:
 dist_params:
   backend: nccl
   port: 29500
-

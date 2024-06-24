@@ -125,6 +125,43 @@ def add_poisson_noise(image, lamb_range, noise=None):
     return noisy_image, noise
 
 
+def add_poisson_noise_basicsr(img, scale_range, clip=True, rounds=False):
+    def generate_poisson_noise(img, scale=1.0):
+        """Generate poisson noise.
+
+        Reference: https://github.com/scikit-image/scikit-image/blob/main/skimage/util/noise.py#L37-L219
+
+        Args:
+            img (Numpy array): Input image, shape (h, w, c), range [0, 1], float32.
+            scale (float): Noise scale. Default: 1.0.
+
+        Returns:
+            (Numpy array): Returned noisy image, shape (h, w, c), range[0, 1],
+                float32.
+        """
+        # round and clip image for counting vals correctly
+        img = np.clip((img * 255.0).round(), 0, 255) / 255.
+        vals = len(np.unique(img))
+        vals = 2 ** np.ceil(np.log2(vals))
+        out = np.float32(np.random.poisson(img * vals) / float(vals))
+        noise = out - img
+        return noise * scale
+
+    def random_generate_poisson_noise(img, scale_range=(0, 1.0)):
+        scale = np.random.uniform(scale_range[0], scale_range[1])
+        return generate_poisson_noise(img, scale)
+
+    noise = random_generate_poisson_noise(img, scale_range)
+    out = img + noise
+
+    if clip and rounds:
+        out = np.clip((out * 255.0).round(), 0, 255) / 255.
+    elif clip:
+        out = np.clip(out, 0, 1)
+    elif rounds:
+        out = (out * 255.0).round() / 255.
+    return out, noise
+
 def add_gaussian_noise(image, sigma_range, noise=None):
     if noise is None:
         sigma = np.random.uniform(sigma_range[0], sigma_range[1])
@@ -247,7 +284,7 @@ def add_pollution(img, lamb1=0.5, lamb2=0.8, mask_pollution=None, mask_backgroun
 
 def add_motion_blur(image, kernel_size=7, motion_blur_kernel=None):
     if motion_blur_kernel is None:
-        angle = np.random.randint(0, 180)
+        angle = np.random.randint(0, 45)
         M = cv2.getRotationMatrix2D((kernel_size / 2, kernel_size / 2), angle, 1)
         motion_blur_kernel = np.diag(np.ones(kernel_size))
         motion_blur_kernel = cv2.warpAffine(motion_blur_kernel, M, (kernel_size, kernel_size))
@@ -683,14 +720,21 @@ if __name__ == '__main__':
     import json
 
     # setup_seed(12345)
-    with open('./deg_params/params_depollute.json', 'r') as f:
+    with open('./deg_params/params_denoise_fromreal.json', 'r') as f:
         params = json.load(f)
-    name = 'TEMImageNet_val1000'
-    task = 'Depollute'
-    mode = 'depollute'
-    make_deg_folder(n_thread=8, orig_folder=r'F:\Datasets\InstructSTEMIR\Original\TEMImageNet_val1000',
-                    save_gt_folder=r'F:\Datasets\InstructSTEMIR\{}\GT\{}'.format(task, name),
-                    save_lq_folder=r'F:\Datasets\InstructSTEMIR\{}\LQ\{}'.format(task, name),
+    # name = 'TEMImageNet_val1000'
+    # task = 'Depollute'
+    # mode = 'depollute'
+    # make_deg_folder(n_thread=8, orig_folder=r'F:\Datasets\InstructSTEMIR\Original\TEMImageNet_val1000',
+    #                 save_gt_folder=r'F:\Datasets\InstructSTEMIR\{}\GT\{}'.format(task, name),
+    #                 save_lq_folder=r'F:\Datasets\InstructSTEMIR\{}\LQ\{}'.format(task, name),
+    #                 repeats=1,
+    #                 mode=mode,
+    #                 params=params)
+
+    make_deg_folder(n_thread=2, orig_folder=r'D:\Datasets\Pairs for test\HQ',
+                    save_gt_folder=None,
+                    save_lq_folder=r'D:\Datasets\Pairs for test\LQ',
                     repeats=1,
-                    mode=mode,
+                    mode='denoise',
                     params=params)

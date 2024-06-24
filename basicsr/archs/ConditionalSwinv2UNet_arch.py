@@ -861,7 +861,7 @@ class ConditionalSwinv2UNet(nn.Module):
                  window_size=7, mlp_ratio=4., qkv_bias=True, qk_scale=None,
                  drop_rate=0., attn_drop_rate=0., drop_path_rate=0.1,
                  norm_layer=nn.LayerNorm, ape=False, patch_norm=True,
-                 use_checkpoint=False, freeze_encoder=False, **kwargs):
+                 use_checkpoint=False, freeze_encoder=False,**kwargs):
         super().__init__()
 
         self.num_layers = len(depths)
@@ -1021,7 +1021,6 @@ class ConditionalSwinv2UNet(nn.Module):
         x, x_downsample = self.forward_features(x)
         x = self.forward_up_features(x, x_downsample, c)
         x = self.up_x4(x)
-
         return x
 
     def flops(self):

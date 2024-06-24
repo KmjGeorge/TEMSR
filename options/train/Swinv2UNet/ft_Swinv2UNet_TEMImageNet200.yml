@@ -1,4 +1,4 @@
-name: SwinUNet_ft_p256w16b8_TEMImageNet1000denoise fft0.02 enlarge10 norm convafterbody_res
+name: SwinUNet_ft_p256w16b8_TEMImageNet200denoise fft0.02 enlarge10 norm nofreeze
 model_type: SwinUNetModel
 scale: 1
 num_gpu: 1
@@ -9,11 +9,11 @@ std: 0.1582
 
 datasets:
   train:
-    name: TEMImageNet_Denoise_1000
+    name: TEMImageNet_Denoise_200
     type: PairedImageDataset
     color: gray
-    dataroot_gt: /mnt/f/Datasets/InstructSTEMIR/Denoise/GT/TEMImageNet1000
-    dataroot_lq: /mnt/f/Datasets/InstructSTEMIR/Denoise/LQ/TEMImageNet1000
+    dataroot_gt: /mnt/f/Datasets/InstructSTEMIR/Denoise/GT/TEMImageNet200
+    dataroot_lq: /mnt/f/Datasets/InstructSTEMIR/Denoise/LQ/TEMImageNet200
     meta_info: ~
     mean: 0.1682
     std: 0.1582
@@ -48,7 +48,7 @@ network_g:
   img_size: 256
   patch_size: 4
   in_chans: 1
-  out_chans: 1
+  num_classes: 1
   embed_dim: 128
   depths: [2, 2, 18, 2]
   depths_decoder: [2, 2, 2, 2]
@@ -65,12 +65,12 @@ network_g:
 
 # path
 path:
-  pretrain_network_g_e: ./models/swinv2/ckpt_epoch_70.pth
+  pretrain_network_g_e: ~
   param_key_g_e: model
   pretrain_network_g: ~
   param_key_g: params
   strict_load_g: False
-  resume_state: ~
+  resume_state: ./experiments/SwinUNet_ft_p256w16b8_TEMImageNet200denoise fft0.02 enlarge10 norm nofreeze/training_states/6000.state
 
 # training settings
 train:
@@ -83,7 +83,7 @@ train:
   scheduler:
     type: MultiStepLR
     gamma: 0.5
-    milestones: [15000]
+    milestones: [10000]
   total_iter: 30000
   warmup_iter: -1
 

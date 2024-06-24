@@ -100,13 +100,20 @@ class SwinUNetModel(BaseModel):
         self.print_network(self.net_g)
         self.conditional = True if self.opt['network_g']['type'] == 'ConditionalSwinv2UNet' else False
         # load pretrained models
+        load_path_e = self.opt['path'].get('pretrain_network_g_e', None)
+        if load_path_e is not None:
+            param_key = self.opt['path'].get('param_key_g_e', 'model')
+            load_pretrained_swinv2(self.net_g, load_path_e, param_key)
+
         load_path = self.opt['path'].get('pretrain_network_g', None)
         if load_path is not None:
             param_key = self.opt['path'].get('param_key_g', 'params')
-            load_pretrained_swinv2(self.net_g, load_path, param_key)
+            self.load_network(self.net_g, load_path, self.opt['path'].get('strict_load_g', True), param_key)
 
         if self.is_train:
             self.init_training_settings()
+        self.mean = self.opt.get('mean', 0.)
+        self.std = self.opt.get('std', 1.)
 
     def init_training_settings(self):
         self.net_g.train()
@@ -319,10 +326,10 @@ class SwinUNetModel(BaseModel):
 
     def get_current_visuals(self):
         out_dict = OrderedDict()
-        out_dict['lq'] = self.lq.detach().cpu()
-        out_dict['result'] = self.output.detach().cpu()
+        out_dict['lq'] = self.lq.detach().cpu() * self.std + self.mean
+        out_dict['result'] = self.output.detach().cpu() * self.std + self.mean
         if hasattr(self, 'gt'):
-            out_dict['gt'] = self.gt.detach().cpu()
+            out_dict['gt'] = self.gt.detach().cpu() * self.std + self.mean
         return out_dict
 
     def save(self, epoch, current_iter):

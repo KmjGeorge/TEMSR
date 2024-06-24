@@ -1,40 +1,40 @@
-name: NAFNet-1118_2_1111_STEM_p224_b32
+name: NAFNet-1118_1_1111_p256b16_TEMImagaNET1000denoise fft0.2 enlarge10
 model_type: SRModel
 scale: 1
 num_gpu: 1
 manual_seed: 12345
 
-gt_size: 224
-queue_size: 256
+gt_size: 256
+
 
 datasets:
   train:
-    name: TEMImageNet_Denoising
+    name: TEMImageNet_Denoise_1000
     type: PairedImageDataset
     color: gray
-    dataroot_gt: /mnt/f/Datasets/TEM-ImageNet-v1.3-master/noBackgroundnoNoise/train
-    dataroot_lq: /mnt/f/Datasets/TEM-ImageNet-v1.3-master/image/train
+    dataroot_gt: /mnt/f/Datasets/InstructSTEMIR/Denoise/GT/TEMImageNet1000
+    dataroot_lq: /mnt/f/Datasets/InstructSTEMIR/Denoise/LQ/TEMImageNet1000
     meta_info: ~
 
     filename_tmpl: '{}'
     io_backend:
       type: disk
-    gt_size: 224
+    gt_size: 256
     use_hflip: true
     use_rot: true
     # data loader
-    num_worker_per_gpu: 4
+    num_worker_per_gpu: 3
     batch_size_per_gpu: 16
-    dataset_enlarge_ratio: 5
+    dataset_enlarge_ratio: 10
     prefetch_mode: cuda
     pin_memory: true
 
   val:
-    name: TEMImageNet_Denoising
+    name: TEMImageNet_Denoise_val500
     type: PairedImageDataset
     color: gray
-    dataroot_gt: /mnt/f/Datasets/TEM-ImageNet-v1.3-master/noBackgroundnoNoise/val224
-    dataroot_lq: /mnt/f/Datasets/TEM-ImageNet-v1.3-master/image/val224
+    dataroot_gt: /mnt/f/Datasets/InstructSTEMIR/Denoise/GT/TEMImageNet500
+    dataroot_lq: /mnt/f/Datasets/InstructSTEMIR/Denoise/LQ/TEMImageNet500
     io_backend:
       type: disk
 
@@ -43,7 +43,7 @@ network_g:
   type: NAFNet
   width: 32
   enc_blk_nums: [ 1, 1, 1, 8 ]
-  middle_blk_num: 2
+  middle_blk_num: 1
   dec_blk_nums: [ 1, 1, 1, 1 ]
   img_channel: 1
 
@@ -51,21 +51,21 @@ network_g:
 path:
   pretrain_network_g: ~
   strict_load_g: true
-  resume_state: ~
+  resume_state: /mnt/f/github/TEMSR/experiments/NAFNet-1118_1_1111_p256b16_TEMImagaNET1000denoise fft0.2 enlarge10/training_states/20000.state
 
 # training settings
 train:
   optim_g:
     type: AdamW
-    lr: !!float 1e-3
+    lr: !!float 1e-4
     weight_decay: 0.
     betas: [0.9, 0.99]
 
   scheduler:
     type: MultiStepLR
-    milestones: [50000]
-    gamma: 1
-  total_iter: 50000
+    milestones: [10000]
+    gamma: 0.5
+  total_iter: 30000
   warmup_iter: -1
 
   # losses
@@ -75,11 +75,11 @@ train:
     reduction: mean
   fft_opt:
     type: FFTLoss
-    loss_weight: 0.01
+    loss_weight: 0.02
     reduction: mean
 
 val:
- val_freq: !!float 2e3
+ val_freq: !!float 1e3
  save_img: true
  metrics:
    psnr: # metric name
@@ -93,8 +93,8 @@ val:
 
 # logging settings
 logger:
-  print_freq: 1000
-  save_checkpoint_freq: !!float 1e4
+  print_freq: 100
+  save_checkpoint_freq: !!float 1e3
   use_tb_logger: true
   wandb:
     project: ~

@@ -1,4 +1,4 @@
-name: SwinUNet_ft_p256w16b8_TEMImageNet1000denoise fft0.02 enlarge10 norm convafterbody_res
+name: SwinUNet_ft_p256w16b8_TEMImageNet1000denoise fft0.02 enlarge10 norm convafterbody res test3w
 model_type: SwinUNetModel
 scale: 1
 num_gpu: 1
@@ -8,29 +8,6 @@ mean: 0.1682
 std: 0.1582
 
 datasets:
-  train:
-    name: TEMImageNet_Denoise_1000
-    type: PairedImageDataset
-    color: gray
-    dataroot_gt: /mnt/f/Datasets/InstructSTEMIR/Denoise/GT/TEMImageNet1000
-    dataroot_lq: /mnt/f/Datasets/InstructSTEMIR/Denoise/LQ/TEMImageNet1000
-    meta_info: ~
-    mean: 0.1682
-    std: 0.1582
-
-    io_backend:
-      type: disk
-    gt_size: 256
-    use_hflip: true
-    use_rot: true
-
-    # data loader
-    num_worker_per_gpu: 4
-    batch_size_per_gpu: 8
-    dataset_enlarge_ratio: 10
-    prefetch_mode: cuda
-    pin_memory: true
-
   val:
     name: TEMImageNet_Denoise_val500
     type: PairedImageDataset
@@ -62,43 +39,20 @@ network_g:
   patch_norm: True
   freeze_encoder: False
 
-
 # path
 path:
-  pretrain_network_g_e: ./models/swinv2/ckpt_epoch_70.pth
+  pretrain_network_g_e: ~
   param_key_g_e: model
-  pretrain_network_g: ~
+  pretrain_network_g: ./experiments/SwinUNet_ft_p256w16b8_TEMImageNet1000denoise fft0.02 enlarge10 norm convafterbody_res/models/net_g_30000.pth
   param_key_g: params
-  strict_load_g: False
+  strict_load_g: True
   resume_state: ~
 
 # training settings
-train:
-  optim_g:
-    type: AdamW
-    lr: !!float 1e-4
-    weight_decay: 0.
-    betas: [0.9, 0.99]
-
-  scheduler:
-    type: MultiStepLR
-    gamma: 0.5
-    milestones: [15000]
-  total_iter: 30000
-  warmup_iter: -1
-
-  # losses
-  pixel_opt:
-    type: L1Loss
-    loss_weight: 1.0
-    reduction: mean
-  fft_opt:
-    type: FFTLoss
-    loss_weight: 0.02
-    reduction: mean
 
 val:
  val_freq: !!float 1e3
+ suffix: ~
  save_img: true
  metrics:
    psnr: # metric name

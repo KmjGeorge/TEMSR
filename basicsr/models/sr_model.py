@@ -281,7 +281,7 @@ class SRModel(BaseModel):       # 继承于BaseModel，BaseModel提供所有Mode
             for metric, value in self.metric_results.items():
                 tb_logger.add_scalar(f'metrics/{dataset_name}/{metric}', value, current_iter)
 
-    def get_current_visuals(self):   # 得到网络输出结果，该函数在validation中被调用
+    def get_current_visuals(self):
         out_dict = OrderedDict()
         out_dict['lq'] = self.lq.detach().cpu()
         out_dict['result'] = self.output.detach().cpu()
