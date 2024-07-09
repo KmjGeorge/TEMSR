@@ -1,0 +1,81 @@
+name: SwinUNet_ft_p256w16b8_Exp2kdenoise fft0.02 norm nofreeze test3w
+model_type: SwinUNetModel
+scale: 1
+num_gpu: 1
+manual_seed: 12345
+gt_size: 256
+mean: 0.2944
+std: 0.1450
+
+datasets:
+  val:
+    name: Expimage_val300
+    type: PairedImageDataset
+    color: gray
+    dataroot_gt: /mnt/d/Datasets/PairsEXP/HQ256/val
+    dataroot_lq: /mnt/d/Datasets/PairsEXP/LQ256/val
+    io_backend:
+      type: disk
+    mean: 0.2944
+    std: 0.1450
+
+
+network_g:
+  type: Swinv2UNet
+  img_size: 256
+  patch_size: 4
+  in_chans: 1
+  out_chans: 1
+  embed_dim: 128
+  depths: [2, 2, 18, 2]
+  depths_decoder: [2, 2, 2, 2]
+  num_heads: [4, 8, 16, 32]
+  window_size: 16
+  mlp_ratio: 4
+  qkv_bias: True
+  drop_rate: 0
+  drop_path_rate: 0.1
+  ape: False
+  patch_norm: True
+  freeze_encoder: False
+
+# path
+path:
+  pretrain_network_g_e: ~
+  param_key_g_e: model
+  pretrain_network_g: ./experiments/SwinUNet_ft_p256w16b8_Exp2kdenoise fft0.02 norm nofreeze/models/net_g_30000.pth
+  param_key_g: params
+  strict_load_g: True
+  resume_state: ~
+
+# training settings
+
+val:
+ val_freq: !!float 1e3
+ suffix: ~
+ save_img: true
+ metrics:
+   psnr: # metric name
+     type: calculate_psnr
+     crop_border: 0
+     test_y_channel: false
+   ssim:
+     type: calculate_ssim
+     crop_border: 0
+     test_y_channel: false
+
+
+# logging settings
+logger:
+  print_freq: 100
+  save_checkpoint_freq: !!float 1e3
+  use_tb_logger: true
+  wandb:
+    project: ~
+    resume_id: ~
+
+# dist training settings
+dist_params:
+  backend: nccl
+  port: 29500
+

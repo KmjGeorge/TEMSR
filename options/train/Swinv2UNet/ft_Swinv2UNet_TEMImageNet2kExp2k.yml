@@ -1,22 +1,22 @@
-name: SwinUNet_fromscatch_p256w16b8_TEMImageNet1000denoise fft0.02 enlarge10 norm
+name: SwinUNet_ft_p256w16b16_TEM2kExp2kdenoise fft0.1 norm freeze
 model_type: SwinUNetModel
 scale: 1
 num_gpu: 1
 manual_seed: 12345
 gt_size: 256
-mean: 0.1682
-std: 0.1582
+mean: 0.2316
+std: 0.1530
 
 datasets:
   train:
-    name: TEMImageNet_Denoise_1000
+    name: TEMImageNet_Denoise2k
     type: PairedImageDataset
     color: gray
-    dataroot_gt: /mnt/f/Datasets/InstructSTEMIR/Denoise/GT/TEMImageNet1000
-    dataroot_lq: /mnt/f/Datasets/InstructSTEMIR/Denoise/LQ/TEMImageNet1000
+    dataroot_gt: /mnt/f/Datasets/InstructSTEMIR/Denoise/GT/TEMImageNet2kExp2k
+    dataroot_lq: /mnt/f/Datasets/InstructSTEMIR/Denoise/LQ/TEMImageNet2kExp2k
     meta_info: ~
-    mean: 0.1682
-    std: 0.1582
+    mean: 0.2316
+    std: 0.1530
 
     io_backend:
       type: disk
@@ -26,8 +26,8 @@ datasets:
 
     # data loader
     num_worker_per_gpu: 4
-    batch_size_per_gpu: 8
-    dataset_enlarge_ratio: 10
+    batch_size_per_gpu: 16
+    dataset_enlarge_ratio: 5
     prefetch_mode: cuda
     pin_memory: true
 
@@ -35,20 +35,19 @@ datasets:
     name: TEMImageNet_Denoise_val500
     type: PairedImageDataset
     color: gray
-    dataroot_gt: /mnt/f/Datasets/InstructSTEMIR/Denoise/GT/TEMImageNet500
-    dataroot_lq: /mnt/f/Datasets/InstructSTEMIR/Denoise/LQ/TEMImageNet500
+    dataroot_gt: /mnt/f/Datasets/InstructSTEMIR/Denoise/GT/TEMImageNet_val500
+    dataroot_lq: /mnt/f/Datasets/InstructSTEMIR/Denoise/LQ/TEMImageNet_val500
     io_backend:
       type: disk
-    mean: 0.1682
-    std: 0.1582
-
+    mean: 0.2316
+    std: 0.1530
 
 network_g:
   type: Swinv2UNet
   img_size: 256
   patch_size: 4
   in_chans: 1
-  num_classes: 1
+  out_chans: 1
   embed_dim: 128
   depths: [2, 2, 18, 2]
   depths_decoder: [2, 2, 2, 2]
@@ -60,17 +59,17 @@ network_g:
   drop_path_rate: 0.1
   ape: False
   patch_norm: True
-  freeze_encoder: False
+  freeze_encoder: True
 
 
 # path
 path:
-  pretrain_network_g_e: ~
+  pretrain_network_g_e: ./models/swinv2/ckpt_epoch_70.pth
   param_key_g_e: model
   pretrain_network_g: ~
   param_key_g: params
   strict_load_g: False
-  resume_state: /mnt/f/github/TEMSR/experiments/SwinUNet_fromscatch_p256w16b8_TEMImageNet1000denoise fft0.02 enlarge10 norm/training_states/20000.state
+  resume_state: ~
 
 # training settings
 train:
@@ -83,7 +82,7 @@ train:
   scheduler:
     type: MultiStepLR
     gamma: 0.5
-    milestones: [10000]
+    milestones: [15000]
   total_iter: 30000
   warmup_iter: -1
 
@@ -94,8 +93,11 @@ train:
     reduction: mean
   fft_opt:
     type: FFTLoss
-    loss_weight: 0.02
+    loss_weight: 0.1
     reduction: mean
+#  tv_opt:
+#    type: TVLoss
+#    loss_weight: 1
 
 val:
  val_freq: !!float 1e3
@@ -125,4 +127,3 @@ dist_params:
   backend: nccl
   port: 29500
 
-#  PYTHONPATH="./:${PYTHONPATH}" CUDA_VISIBLE_DEVICES=0,1 python -m torch.distributed.launch --nproc_per_node=2 --master_port=4321 basicsr/train.py -opt options/train/Swinv2UNet/test_Swinv2UNet_TEMImageNet.yml --launcher pytorch --debug

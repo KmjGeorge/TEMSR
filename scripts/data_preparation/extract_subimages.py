@@ -40,15 +40,15 @@ def main():
     """
 
     opt = {}
-    opt['n_thread'] = 8
+    opt['n_thread'] = 1
     opt['compression_level'] = 0
 
     # HR images
-    opt['input_folder'] = r'D:\Datasets\cnn\pred\BGNoise'
-    opt['save_folder'] = r'D:\Datasets\STEMEXP256\BGNoise256'
+    opt['input_folder'] = r'D:\Datasets\InstSIP\Macro-HR'
+    opt['save_folder'] = r'D:\Datasets\InstSIP\Macro-HR crops'
     opt['crop_size'] = 256
     opt['step'] = 256
-    opt['thresh_size'] = 0
+    opt['thresh_size'] = 256
     extract_subimages(opt)
 
     '''

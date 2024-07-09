@@ -5,6 +5,7 @@ results/*
 tb_logger/*
 wandb/*
 tmp/*
+show/*
 
 docs/api
 scripts/__init__.py

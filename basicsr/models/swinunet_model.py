@@ -153,6 +153,11 @@ class SwinUNetModel(BaseModel):
         else:
             self.cri_perceptual = None
 
+        if train_opt.get('tv_opt'):
+            self.cri_tv = build_loss(train_opt['tv_opt']).to(self.device)
+        else:
+            self.cri_tv = None
+
         if self.cri_pix is None and self.cri_perceptual is None:
             raise ValueError('Both pixel and perceptual losses are None.')
 
@@ -212,7 +217,11 @@ class SwinUNetModel(BaseModel):
             l_cx = self.cri_cx(self.output, self.gt)
             l_total += l_cx
             loss_dict['l_cx'] = l_cx
-
+        # tv loss
+        if self.cri_tv:
+            l_tv = self.cri_tv(self.output)
+            l_total += l_tv
+            loss_dict['l_tv'] = l_tv
         l_total.backward()
         self.optimizer_g.step()
 

@@ -1,0 +1,63 @@
+name: NAFNet Exptest_2w5
+model_type: SRModel
+scale: 1
+num_gpu: 1
+manual_seed: 12345
+
+# ----------------- options for synthesizing training data in RealESRNetModel ----------------- #
+
+gt_size: 256
+
+datasets:
+  val:
+    name: Expimage_val300
+    type: PairedImageDataset
+    color: gray
+    dataroot_gt: /mnt/d/Datasets/PairsEXP/HQ256/val
+    dataroot_lq: /mnt/d/Datasets/PairsEXP/LQ256/val
+    io_backend:
+      type: disk
+
+network_g:
+  type: NAFNet
+  width: 32
+  enc_blk_nums: [ 1, 1, 1, 8 ]
+  middle_blk_num: 1
+  dec_blk_nums: [ 1, 1, 1, 1 ]
+  img_channel: 1
+
+# path
+path:
+  pretrain_network_g: ./experiments/NAFNet-1118_1_1111_p256b16_TEMImagaNET1000denoise fft0.2 enlarge10/models/net_g_25000.pth
+  strict_load_g: true
+  resume_state: ~
+
+
+val:
+ val_freq: !!float 1e4
+ save_img: true
+ suffix: ~
+ metrics:
+   psnr: # metric name
+     type: calculate_psnr
+     crop_border: 0
+     test_y_channel: false
+   ssim:
+     type: calculate_ssim
+     crop_border: 0
+     test_y_channel: false
+
+# logging settings
+logger:
+  print_freq: 1000
+  save_checkpoint_freq: !!float 1e3
+  use_tb_logger: true
+  wandb:
+    project: ~
+    resume_id: ~
+
+# dist training settings
+dist_params:
+  backend: nccl
+  port: 29500
+

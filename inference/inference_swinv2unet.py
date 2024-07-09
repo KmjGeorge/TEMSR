@@ -6,7 +6,6 @@ import glob
 import numpy as np
 import os
 import torch
-
 from basicsr.archs.ConditionalSwinv2UNet_arch import ConditionalSwinv2UNet
 from basicsr.archs.Swinv2UNet_arch import Swinv2UNet
 from basicsr.archs.instructir_arch import InstructIR
@@ -83,6 +82,7 @@ def load_pretrained_swinv2(model, load_path, params_key):
     del checkpoint
     torch.cuda.empty_cache()
 
+
 def inference_tile(model, img_tensor, tilesize, stride, device):
     # 原始图像尺寸
     height, width = img_tensor.shape[2], img_tensor.shape[3]
@@ -92,28 +92,26 @@ def inference_tile(model, img_tensor, tilesize, stride, device):
     num_blocks_width = (width + stride - 1) // stride
 
     # 初始化累积图像，用于累加所有块的输出
-    acc_image = torch.zeros(1, 1, height, width).to(device)
+    acc_image = torch.zeros(1, 1, height, width).cpu()
 
     # 初始化计数图像，用于记录每个像素被覆盖的次数
-    count_image = torch.zeros(1, 1, height, width).to(device)
+    count_image = torch.zeros(1, 1, height, width).cpu()
 
     # 遍历每个块
     for i in range(num_blocks_height):
         for j in range(num_blocks_width):
-            print('Processing Tile : {}, {}.  Total : {}, {}'.format(i+1, j+1, num_blocks_height, num_blocks_width))
+            print('Processing Tile : {}, {}.  Total : {}, {}'.format(i + 1, j + 1, num_blocks_height, num_blocks_width))
             # 计算块的坐标
             x1, y1 = i * stride, j * stride
             x2, y2 = min(x1 + tilesize, height), min(y1 + tilesize, width)
-
             # 裁剪块
             block = img_tensor[:, :, x1:x2, y1:y2]
 
             # 填充块以适应模型输入大小
             padded_block = torch.zeros_like(img_tensor[:, :, :tilesize, :tilesize])
             padded_block[:, :, :x2 - x1, :y2 - y1] = block
-
             # 推理块
-            block_output = model(padded_block)
+            block_output = model(padded_block).detach().cpu()
 
             # 累加输出和计数
             acc_image[:, :, x1:x2, y1:y2] += block_output[:, :, :x2 - x1, :y2 - y1]
@@ -130,18 +128,24 @@ def main():
         '--model_path',
         type=str,
         default=  # noqa: E251
-        r'F:\github\TEMSR\experiments\SwinUNet_ft_p256w16b8_TEMImageNet1000denoise fft0.02 enlarge10 norm convafterbody_res\models\net_g_30000.pth'
+        r'F:\github\TEMSR\experiments\SwinUNet_ft_p256w16b16_TEM2kExp2kdenoise fft0.1 norm freeze\models\net_g_22000.pth'
+        # r'F:\github\TEMSR\experiments\SwinUNet_ft_p256w16b16_TEM5kdenoise fft0.1 norm freeze\models\net_g_18000.pth'
 
     )
-    parser.add_argument('--input', type=str, default=r'D:\Datasets\Pairs for test\LQ',
+    parser.add_argument('--input', type=str,
+                        # default=r'D:\Datasets\PairsEXP\LQ256\val',
+                        default=r'F:\Datasets\fuzaquexian',
                         help='output folder')
-    parser.add_argument('--output', type=str, default='../show/Swinv2UNet_ft2w2_convafterbody_res_256',
+    parser.add_argument('--output', type=str,
+                        default='../show/SwinUNet_ft_p256w16b16_TEM2kExp2kdenoise fft0.1 norm freeze 2w2 fuzaquexian',
                         help='output folder')
-
+    parser.add_argument("--patch_size", type=int,
+                        default=512)
+    parser.add_argument("--post_fix",type=str,default='Swinv2UNet')
     args = parser.parse_args()
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     # set up model
-    model = Swinv2UNet(img_size=256,
+    model = Swinv2UNet(img_size=args.patch_size,
                        patch_size=4,
                        in_chans=1,
                        num_classes=1,
@@ -165,8 +169,17 @@ def main():
     os.makedirs(args.output, exist_ok=True)
 
     input_folder = args.input
-    mean = 0.1682
-    std = 0.1582
+    # mean = 0.1682      # TEMImageNet
+    # std = 0.1582
+
+    mean = 0.2316  # TEM2k+Exp2k
+    std = 0.1530
+
+    # mean = 0.2944       # Exp2k
+    # std = 0.1450
+
+    # mean = 0
+    # std = 1
 
     # for filename in os.listdir(input_folder):
     #     img = cv2.imread(os.path.join(input_folder, filename), 0).astype(np.float32) / 255.
@@ -178,17 +191,39 @@ def main():
     # print('mean =', mean, 'std =', std)
     total_length = len(os.listdir(input_folder))
     for idx, filename in enumerate(os.listdir(input_folder)):
-        img = cv2.imread(os.path.join(input_folder, filename), 0).astype(np.float32) / 255.
+        img_ori = cv2.imread(os.path.join(input_folder, filename), 0)
+        h, w = img_ori.shape
+        if h < args.patch_size:
+            pad_1 = (0, args.patch_size - h)
+        else:
+            pad_1 = (0, 0)
+        if w < args.patch_size:
+            pad_2 = (0, args.patch_size - w)
+        else:
+            pad_2 = (0, 0)
+        img = np.pad(img_ori, (pad_1, pad_2),  mode='constant', constant_values=0)
+        img = img.astype(float) / 255.0
         img = (img - mean) / std
         img = torch.from_numpy(img).float().unsqueeze(0).unsqueeze(0).to(device)
-        output = inference_tile(model, img, tilesize=256, stride=192, device=device)
+        output = inference_tile(model, img, tilesize=args.patch_size, stride=args.patch_size, device=device)
         # output = model(img)
         output = output.squeeze().detach().cpu().numpy()
-        output = (np.clip(output * std + mean, 0, 1) * 255).round().astype(np.uint8)
+        output = output[:h, :w]
+        # output = (np.clip(output * std + mean, 0, 1) * 255).round().astype(np.uint8)
+
+        # normalize to 0~1
+        output_max, output_min = output.max(), output.min()
+        output = (output - output_min) / (output_max - output_min)
+        output = (np.clip(output, 0, 1) * 255).round().astype(np.uint8)
         save_path = os.path.join(args.output,
-                                 filename.replace('.png', '_Swinv2UNet.png'))
+                                 filename.replace('.jpg', '_{}.png'.format(args.post_fix)))
         cv2.imwrite(save_path, output)
-        # cv2.imwrite(save_path.replace('.png', '_old.png'), output2)
+
+        # cv2.imwrite(os.path.join(args.output, filename.replace('.jpg', '_LQ.jpg')), img_ori)
+        # shutil.copy(os.path.join(args.input.replace('LQ', 'HQ'), filename),
+        #             os.path.join(args.output, filename.replace('.jpg', '_HQ.jpg')))
+
+        # cv2.imwrite(save_path.replace('.jpg', '_old.jpg'), output2)
         # print('{} / {}: Saving output image to {}'.format(idx, total_length, save_path))
 
 

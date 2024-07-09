@@ -90,9 +90,10 @@ class InstructIRDataset(data.Dataset):
             self.instructs_deblur = instruct_data[instruct_data['class'] == 'Deblur']['instruct']
             self.instructs_LLIE = instruct_data[instruct_data['class'] == 'LLIE']['instruct']
             self.instructs_segmentation = instruct_data[instruct_data['class'] == 'Segmentation']['instruct']
+            self.instructs_sr = instruct_data[instruct_data['class'] == 'Super-Resolution']['instruct']
 
         self.embedding_model = LanguageModel(self.opt['lm_path']).eval()
-        self.lm_head = LMHead(embedding_dim=384, hidden_dim=512, num_classes=4).eval()
+        self.lm_head = LMHead(embedding_dim=384, hidden_dim=opt['text_dim'], num_classes=opt['task_num']).eval()
         self.lm_head.load_state_dict(torch.load(opt['lm_head_weight_path']))
 
     def __getitem__(self, index):
@@ -122,6 +123,8 @@ class InstructIRDataset(data.Dataset):
                 lq_instruct = np.random.choice(self.instructs_LLIE, 1, replace=False)[0]
             elif lq_cls == 'Segmentation':
                 lq_instruct = np.random.choice(self.instructs_segmentation, 1, replace=False)[0]
+            elif lq_cls == 'Super-Resolution':
+                lq_instruct = np.random.choice(self.instructs_sr, 1, replace=False)[0]
         else:
             lq_instruct = self.meta_info['instruct'][index]
 

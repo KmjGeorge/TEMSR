@@ -581,7 +581,7 @@ class PatchEmbed(nn.Module):
         return flops
 
 
-@ARCH_REGISTRY.register()
+# @ARCH_REGISTRY.register()
 class Swinv2UNet(nn.Module):
     r""" Swin Transformer
         A PyTorch impl of : `Swin Transformer: Hierarchical Vision Transformer using Shifted Windows`  -
@@ -697,8 +697,15 @@ class Swinv2UNet(nn.Module):
 
         self.up = FinalPatchExpand_X4(input_resolution=(img_size // patch_size, img_size // patch_size),
                                       dim_scale=4, dim=embed_dim)
+        self.conv_after_body = nn.Sequential(nn.Conv2d(embed_dim, embed_dim // 4, 3, 1, 1),
+                                             nn.LeakyReLU(negative_slope=0.2, inplace=True),
+                                             nn.Conv2d(embed_dim // 4, embed_dim // 4, 1, 1, 0),
+                                             nn.LeakyReLU(negative_slope=0.2, inplace=True),
+                                             nn.Conv2d(embed_dim // 4, embed_dim, 3, 1, 1))
 
-        self.output = nn.Conv2d(in_channels=embed_dim, out_channels=self.out_chans, kernel_size=1, bias=False)
+        self.output = nn.Conv2d(in_channels=embed_dim, out_channels=self.out_chans, kernel_size=3, padding=1, stride=1)
+
+        # self.output = nn.Conv2d(in_channels=embed_dim, out_channels=self.out_chans, kernel_size=1, bias=False)
 
         self.freeze_encoder = freeze_encoder
         self.apply(self._init_weights)
@@ -764,13 +771,16 @@ class Swinv2UNet(nn.Module):
         x = x.view(B, 4 * H, 4 * W, -1)
         x = x.permute(0, 3, 1, 2)  # B,C,H,W
 
-        x = self.output(x)
         return x
 
     def forward(self, x):
+
         x, x_downsample = self.forward_features(x)
         x = self.forward_up_features(x, x_downsample)
         x = self.up_x4(x)
+        res = self.conv_after_body(x)
+        x = x + res
+        x = self.output(x)
 
         return x
 

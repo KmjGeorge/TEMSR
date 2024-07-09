@@ -37,19 +37,21 @@ def add_row_line_noise(img, row_factor_range=[0.5, 1.5]):
     h, w = img.shape
     noisy_img = img.copy()
     for i in range(np.random.randint(1, 3)):
-        width = np.random.randint(1, 3)
+        width = np.random.randint(1, 5)
         row_idx = np.random.randint(0, h - width)
         length = np.random.randint(w // 2, w)
         row = img[row_idx:row_idx + width,
               int((w - length) * 0.5):int((w + length) * 0.5)]  # (width, length)
         row_mean = np.mean(row, axis=1, keepdims=True)  # (width, 1)
-        factors = np.random.uniform(row_factor_range[0], row_factor_range[1])
+        factors = np.random.uniform(row_factor_range[0], row_factor_range[1], size=(width, length))
         row = row_mean * factors
         noisy_img[row_idx: row_idx + width, int((w - length) * 0.5):int((w + length) * 0.5)] = row
     return noisy_img
 
 
 def add_black_pixel_noise(img, num_points):
+    if num_points == 0:
+        return img
     h, w = img.shape
     noisy_img = img.copy()
     for i in range(np.random.randint(1, num_points)):
@@ -59,6 +61,8 @@ def add_black_pixel_noise(img, num_points):
 
 
 def add_zinger_pixel_noise(img, num_points, maxval=1.):
+    if num_points == 0:
+        return img
     h, w = img.shape
     noisy_img = img.copy()
     for i in range(np.random.randint(1, num_points)):
@@ -69,9 +73,14 @@ def add_zinger_pixel_noise(img, num_points, maxval=1.):
 
 def adjust_contrast(img, contrast_factor, maxval):
     mean = img.mean()
-    contrasted_image = (img - mean) * contrast_factor + mean
-    contrasted_image = contrasted_image.clip(0, maxval)
-    return contrasted_image
+    adjusted_image = (img - mean) * contrast_factor + mean
+    adjusted_image = adjusted_image.clip(0, maxval)
+    return adjusted_image
+
+
+def adjust_brightness(img, bright_factor, maxval):
+    adjusted_image = np.clip(bright_factor * img, 0, maxval)
+    return adjusted_image
 
 
 def tensor2inp(img_tensor):
@@ -80,6 +89,20 @@ def tensor2inp(img_tensor):
     img_np *= 255
     img_np = img_np.astype(np.uint8)
     return img_np
+
+def gaussian_2d(shape=(512, 512), center=None):
+    m, n = [(ss - 1.) / 2. for ss in shape]
+    y, x = np.ogrid[-m:m + 1, -n:n + 1]
+
+    if center is None:
+        center = (0, 0)
+    x0, y0 = center
+    sigma_x, sigma_y = shape[1] // 2, shape[0] // 6
+    g = np.exp(-((x - x0) ** 2 / (2 * sigma_x ** 2) + (y - y0) ** 2 / (2 * sigma_y ** 2)))
+    g_max, g_min = g.max(), g.min()
+    g = (g - g_min) / (g_max - g_min)
+    return g
+
 
 
 def generate_kernel(kernel_range=[2 * v + 1 for v in range(3, 7)],
@@ -162,6 +185,7 @@ def add_poisson_noise_basicsr(img, scale_range, clip=True, rounds=False):
         out = (out * 255.0).round() / 255.
     return out, noise
 
+
 def add_gaussian_noise(image, sigma_range, noise=None):
     if noise is None:
         sigma = np.random.uniform(sigma_range[0], sigma_range[1])
@@ -171,7 +195,8 @@ def add_gaussian_noise(image, sigma_range, noise=None):
 
 
 def deg_from_sim_all(gt_img,
-                     sigma_jitter_range=[2, 2],
+                     sigma_jitter_x_range=[0.5, 2],
+                     sigma_jitter_y_range=[0, 0.5],
                      scan_noise_prob=0.2,
                      blur_prob=0.2,
                      pollute_prob=0.5,
@@ -200,17 +225,23 @@ def deg_from_sim_all(gt_img,
         mask_lambda2 = np.random.uniform(mask_lambda2_range[0], mask_lambda2_range[1])
         out, _ = add_pollution(out, lamb1=mask_lambda1, lamb2=mask_lambda2)
 
-    # scan jitter
+    # scanning jitter
     if np.random.uniform() < scan_noise_prob:
-        sigma_jitter = np.random.uniform(sigma_jitter_range[0], sigma_jitter_range[1])
-        out, _ = add_scan_noise(out, sigma_jitter, phi=np.pi / 4)
+        sigma_jitter_x = np.random.uniform(sigma_jitter_x_range[0], sigma_jitter_x_range[1])
+        sigma_jitter_y = np.random.uniform(sigma_jitter_y_range[0], sigma_jitter_y_range[1])
+        jitter_map = generate_jitter_map(out, sigma_jitter_x, sigma_jitter_y, phi_x=0.5, phi_y=0.5)
+        out = add_scan_jitter(out, jitter_map[0], jitter_map[1])
 
-    # add blur
+    # motion blur
     if np.random.uniform() < blur_prob:
         blur_kernel_size = np.random.randint(blur_kernel_range[0], blur_kernel_range[1])
         if blur_kernel_size % 2 == 0:
             blur_kernel_size += 1
-        out, _ = add_motion_blur(out, kernel_size=blur_kernel_size)
+        h, w = gt_img.shape
+        width = np.random.randint(80, 200)
+        row_idx = np.random.randint(0, h - width)
+        region = [row_idx, row_idx + width, 0, w]
+        out, _ = add_motion_blur(out, kernel_size=blur_kernel_size, region=region)
 
     # poisson noise
     out, _ = add_poisson_noise(out, lamb_range=scale_p_range)
@@ -253,7 +284,7 @@ def random_crop(image, shape):
     return cropped_image
 
 
-def get_mask(mask_folder=r'F:\Datasets\InstructTEMSR\Depollute\mask\local'):
+def get_mask(mask_folder=r'F:\Datasets\InstructTEMSR\decontamination\mask\local'):
     mask_files = os.listdir(mask_folder)
     mask_file = np.random.choice(mask_files, 1, replace=False)[0]
     mask = cv2.imread(os.path.join(mask_folder, mask_file), 0)
@@ -262,17 +293,18 @@ def get_mask(mask_folder=r'F:\Datasets\InstructTEMSR\Depollute\mask\local'):
 
 def add_pollution(img, lamb1=0.5, lamb2=0.8, mask_pollution=None, mask_background=None):
     if mask_pollution is None:
-        mask_pollution = get_mask(r'F:\Datasets\InstructTEMSR\Depollute\mask\local')
+        mask_pollution = get_mask(r'F:\Datasets\InstructTEMSR\decontamination\mask\local')
         h, w = img.shape
         mask_pollution = random_crop(mask_pollution, (h // 8, w // 8))
         mask_pollution = cv2.resize(mask_pollution, (h, w))
         mask_pollution = mask_pollution / 255.0
     mask_pollution = adjust_contrast(mask_pollution, lamb1, maxval=1.)
-    img = np.clip(img * mask_pollution, 0, 1)
+    if lamb1 > 0:
+        img = np.clip(img * mask_pollution, 0, 1)
 
     if mask_background is None:
         mask_background = get_mask(r'D:\Datasets\STEMEXP256\bgcnn\pred\purebg')
-        mask_background_gradient = get_mask(r'F:\Datasets\InstructTEMSR\Depollute\mask\global\gradient')
+        mask_background_gradient = get_mask(r'F:\Datasets\InstructTEMSR\decontamination\mask\global\gradient')
         h, w = img.shape
         mask_background = random_crop(mask_background, (h, w))
         mask_background_gradient = np.clip(cv2.resize(mask_background_gradient, (h, w)) / 255.0, 0, 1)
@@ -282,20 +314,38 @@ def add_pollution(img, lamb1=0.5, lamb2=0.8, mask_pollution=None, mask_backgroun
     return img, (mask_pollution, mask_background)
 
 
-def add_motion_blur(image, kernel_size=7, motion_blur_kernel=None):
+def add_motion_blur(image, kernel_size=7, motion_blur_kernel=None, region=None):
     if motion_blur_kernel is None:
         angle = np.random.randint(0, 45)
         M = cv2.getRotationMatrix2D((kernel_size / 2, kernel_size / 2), angle, 1)
         motion_blur_kernel = np.diag(np.ones(kernel_size))
         motion_blur_kernel = cv2.warpAffine(motion_blur_kernel, M, (kernel_size, kernel_size))
-        motion_blur_kernel = motion_blur_kernel / kernel_size
-    image_blurred = cv2.filter2D(image, -1, motion_blur_kernel)
+        # normalize
+        motion_blur_kernel = motion_blur_kernel / np.sum(motion_blur_kernel)
+    if region:
+        image_region = image[region[0]:region[1], region[2]:region[3]]
+        region_size = (region[1] - region[0], region[3] - region[2])
+        region_blurred = cv2.filter2D(image_region, -1, motion_blur_kernel)
+        image_blurred = image.copy()
+        # use gaussian mask to smooth
+        mask_g = gaussian_2d(shape=region_size)
+        region_orig = image[region[0]:region[1], region[2]:region[3]]
+        blurred_content = region_blurred * mask_g + region_orig * (1-mask_g)
+        # blurred_content, _ = add_gaussian_noise(blurred_content, sigma_range=[0.02, 0.05])
+        image_blurred[region[0]:region[1], region[2]:region[3]] = blurred_content
+
+
+
+    else:
+        image_blurred = cv2.filter2D(image, -1, motion_blur_kernel)
+
     image_blurred = np.clip(image_blurred, 0, 1)
     return image_blurred, motion_blur_kernel
 
 
 def deg_from_sim_denoise(gt_img,
-                         sigma_jitter_range=[1, 4],
+                         sigma_jitter_x_range=[0.5, 1],
+                         sigma_jitter_y_range=[0.0, 0.25],
                          scan_noise_prob=0.5,
                          blur_prob=0.5,
                          pollute_prob=0.5,
@@ -316,6 +366,17 @@ def deg_from_sim_denoise(gt_img,
         contrast_factor = np.random.uniform(contrast_range[0], contrast_range[1])
         out = adjust_contrast(out, contrast_factor, maxval=1.)
 
+    # motion blur
+    if np.random.uniform() < blur_prob:
+        blur_kernel_size = np.random.randint(blur_kernel_range[0], blur_kernel_range[1])
+        if blur_kernel_size % 2 == 0:
+            blur_kernel_size += 1
+        h, w = gt_img.shape
+        width = np.random.randint(80, 200)
+        row_idx = np.random.randint(0, h - width)
+        region = [row_idx, row_idx + width, 0, w]
+        out, _ = add_motion_blur(out, kernel_size=blur_kernel_size, region=region)
+
     # add pollution
     if np.random.uniform() < pollute_prob:
         mask_lambda1 = np.random.uniform(mask_lambda1_range[0], mask_lambda1_range[1])
@@ -323,17 +384,13 @@ def deg_from_sim_denoise(gt_img,
         out, pollute = add_pollution(out, lamb1=mask_lambda1, lamb2=mask_lambda2)
 
     gt = out.copy()
-
     # scanning jitter
     if np.random.uniform() < scan_noise_prob:
-        sigma_jitter = np.random.uniform(sigma_jitter_range[0], sigma_jitter_range[1])
-        out, _ = add_scan_noise(out, sigma_jitter, phi=np.pi / 4)
-    # motion blur
-    if np.random.uniform() < blur_prob:
-        blur_kernel_size = np.random.randint(blur_kernel_range[0], blur_kernel_range[1])
-        if blur_kernel_size % 2 == 0:
-            blur_kernel_size += 1
-        out, _ = add_motion_blur(out, kernel_size=blur_kernel_size)
+        sigma_jitter_x = np.random.uniform(sigma_jitter_x_range[0], sigma_jitter_x_range[1])
+        sigma_jitter_y = np.random.uniform(sigma_jitter_y_range[0], sigma_jitter_y_range[1])
+        jitter_map = generate_jitter_map(out, sigma_jitter_x, sigma_jitter_y, phi_x=0.5, phi_y=0.5)
+        out = add_scan_jitter(out, jitter_map[0], jitter_map[1])
+        # out, _ = add_scan_noise(out, sigma_jitter, phi=np.pi / 4)
 
     # poisson noise
     out, _ = add_poisson_noise(out, lamb_range=scale_p_range)
@@ -354,7 +411,8 @@ def deg_from_sim_denoise(gt_img,
 
 
 def deg_from_sim_ll(gt_img,
-                    sigma_jitter_range=[2, 2],
+                    sigma_jitter_x_range=[0.5, 1],
+                    sigma_jitter_y_range=[0.0, 0.25],
                     scan_noise_prob=0.2,
                     blur_prob=0.2,
                     pollute_prob=0.5,
@@ -372,26 +430,29 @@ def deg_from_sim_ll(gt_img,
     out = gt_img / 255.0
 
     gt = out.copy()
-    # random contrast
-    if np.random.uniform() < contrast_prob:
-        contrast_factor = np.random.uniform(contrast_range[0], contrast_range[1])
-        out = adjust_contrast(out, contrast_factor, maxval=1.)
+    # # random contrast
+    # if np.random.uniform() <= contrast_prob:
+    contrast_factor = np.random.uniform(contrast_range[0], contrast_range[1])
+    out = adjust_contrast(out, contrast_factor, maxval=1.)
+    bright_factor = np.random.uniform(0.3, 0.5)
+    out = adjust_brightness(out, bright_factor=bright_factor, maxval=1.)
 
     # add pollution
-    if np.random.uniform() < pollute_prob:
+    if np.random.uniform() <= pollute_prob:
         mask_lambda1 = np.random.uniform(mask_lambda1_range[0], mask_lambda1_range[1])
         mask_lambda2 = np.random.uniform(mask_lambda2_range[0], mask_lambda2_range[1])
         out, pollute = add_pollution(out, lamb1=mask_lambda1, lamb2=mask_lambda2)
         gt, _ = add_pollution(gt, lamb1=mask_lambda1, lamb2=mask_lambda2, mask_pollution=pollute[0],
                               mask_background=pollute[1])
     # scanning jitter
-    if np.random.uniform() < scan_noise_prob:
-        sigma_jitter = np.random.uniform(sigma_jitter_range[0], sigma_jitter_range[1])
-        out, delta_map = add_scan_noise(out, sigma_jitter, phi=np.pi / 4)
-        gt, _ = add_scan_noise(gt, sigma_jitter, phi=np.pi / 4, delta_map_x=delta_map[0], delta_map_y=delta_map[1])
-
+    if np.random.uniform() <= scan_noise_prob:
+        sigma_jitter_x = np.random.uniform(sigma_jitter_x_range[0], sigma_jitter_x_range[1])
+        sigma_jitter_y = np.random.uniform(sigma_jitter_y_range[0], sigma_jitter_y_range[1])
+        jitter_map = generate_jitter_map(out, sigma_jitter_x, sigma_jitter_y, phi_x=0.5, phi_y=0.5)
+        out = add_scan_jitter(out, jitter_map[0], jitter_map[1])
+        gt = add_scan_jitter(gt, jitter_map[0], jitter_map[1])
     # motion blur
-    if np.random.uniform() < blur_prob:
+    if np.random.uniform() <= blur_prob:
         blur_kernel_size = np.random.randint(blur_kernel_range[0], blur_kernel_range[1])
         if blur_kernel_size % 2 == 0:
             blur_kernel_size += 1
@@ -399,17 +460,18 @@ def deg_from_sim_ll(gt_img,
         gt, _ = add_motion_blur(gt, kernel_size=blur_kernel_size, motion_blur_kernel=kernel)
 
     # poisson noise
-    out, noise_p = add_poisson_noise(out, lamb_range=scale_p_range)
-    gt, _ = add_poisson_noise(gt, lamb_range=scale_p_range, noise=noise_p * 0.3)
+    # out, noise_p = add_poisson_noise(out, lamb_range=scale_p_range)
+    # gt, _ = add_poisson_noise(gt, lamb_range=scale_p_range, noise=noise_p * 0.3)
+
     # gaussian noise
     out, noise_g = add_gaussian_noise(out, sigma_range=sigma_g_range)
     gt, _ = add_gaussian_noise(gt, sigma_range=sigma_g_range, noise=noise_g * 0.2)
 
     # row-line
-    if np.random.uniform() < row_line_prob:
+    if np.random.uniform() <= row_line_prob:
         out = add_row_line_noise(out, row_factor_range=row_factor_range)
     # black pixel and zinger pixel
-    if np.random.uniform() < 0.5:
+    if np.random.uniform() <= 0.5:
         out = add_black_pixel_noise(out, num_points=max_black_pixels)
         out = add_zinger_pixel_noise(out, num_points=max_zinger_pixels)
 
@@ -418,69 +480,9 @@ def deg_from_sim_ll(gt_img,
     return out, gt
 
 
-# def deg_from_sim_deblur(gt_img,
-#                         sigma_jitter_range=[2, 2],
-#                         scan_noise_prob=0.2,
-#                         blur_prob=0.2,
-#                         pollute_prob=0.5,
-#                         contrast_prob=0.5,
-#                         row_line_prob=0.5,
-#                         blur_kernel_range=[0., 0.],
-#                         mask_lambda1_range=[0.5, 0.9],
-#                         mask_lambda2_range=[0.7, 1],
-#                         contrast_range=[0.5, 1.2],
-#                         scale_p_range=[1., 1.],
-#                         sigma_g_range=[1., 1.],
-#                         row_factor_range=[0.5, 1.5],
-#                         max_black_pixels=0,
-#                         max_zinger_pixels=0):
-#     out = gt_img / 255.0
-#     # random contrast
-#     if np.random.uniform() < contrast_prob:
-#         contrast_factor = np.random.uniform(contrast_range[0], contrast_range[1])
-#         out = adjust_contrast(out, contrast_factor, maxval=1.)
-#
-#     # add pollution
-#     if np.random.uniform() < pollute_prob:
-#         mask_lambda1 = np.random.uniform(mask_lambda1_range[0], mask_lambda1_range[1])
-#         mask_lambda2 = np.random.uniform(mask_lambda2_range[0], mask_lambda2_range[1])
-#         out, _ = add_pollution(out, lamb1=mask_lambda1, lamb2=mask_lambda2)
-#
-#     gt = out.copy()
-#     # scanning jitter
-#     if np.random.uniform() < scan_noise_prob:
-#         sigma_jitter = np.random.uniform(sigma_jitter_range[0], sigma_jitter_range[1])
-#         out, _ = add_scan_noise(out, sigma_jitter, phi=np.pi / 4)
-#
-#     # motion blur
-#     if np.random.uniform() < blur_prob:
-#         blur_kernel_size = np.random.randint(blur_kernel_range[0], blur_kernel_range[1])
-#         if blur_kernel_size % 2 == 0:
-#             blur_kernel_size += 1
-#         out, _ = add_motion_blur(out, kernel_size=blur_kernel_size)
-#
-#     # poisson noise
-#     out, p_noise = add_poisson_noise(out, lamb_range=scale_p_range)
-#     gt, _ = add_poisson_noise(gt, lamb_range=scale_p_range, noise=p_noise * 0.3)
-#     # gaussian noise
-#     out, g_noise = add_gaussian_noise(out, sigma_range=sigma_g_range)
-#     gt, _ = add_gaussian_noise(gt, sigma_range=sigma_g_range, noise=g_noise * 0.2)
-#
-#     # row-line
-#     if np.random.uniform() < row_line_prob:
-#         out = add_row_line_noise(out, row_factor_range=row_factor_range)
-#     # black pixel and zinger pixel
-#     if np.random.uniform() < 0.5:
-#         out = add_black_pixel_noise(out, num_points=max_black_pixels)
-#         out = add_zinger_pixel_noise(out, num_points=max_zinger_pixels)
-#
-#     out = np.clip((out * 255.0).round(), 0, 255)
-#     gt = np.clip((gt * 255.0).round(), 0, 255)
-#     return out, gt
-
-
-def deg_from_sim_depollute(gt_img,
-                        sigma_jitter_range=[2, 2],
+def deg_from_sim_deblur(gt_img,
+                        sigma_jitter_x_range=[0.5, 2],
+                        sigma_jitter_y_range=[0.25, 0.5],
                         scan_noise_prob=0.2,
                         blur_prob=0.2,
                         pollute_prob=0.5,
@@ -495,6 +497,77 @@ def deg_from_sim_depollute(gt_img,
                         row_factor_range=[0.5, 1.5],
                         max_black_pixels=0,
                         max_zinger_pixels=0):
+    out = gt_img / 255.0
+    # # random contrast
+    # if np.random.uniform() < contrast_prob:
+    #     contrast_factor = np.random.uniform(contrast_range[0], contrast_range[1])
+    #     out = adjust_contrast(out, contrast_factor, maxval=1.)
+    #
+    # add pollution
+    if np.random.uniform() < pollute_prob:
+        mask_lambda1 = np.random.uniform(mask_lambda1_range[0], mask_lambda1_range[1])
+        mask_lambda2 = np.random.uniform(mask_lambda2_range[0], mask_lambda2_range[1])
+        out, _ = add_pollution(out, lamb1=mask_lambda1, lamb2=mask_lambda2)
+
+    gt = out.copy()
+
+
+
+    # motion blur
+    if np.random.uniform() < blur_prob:
+        blur_kernel_size = np.random.randint(blur_kernel_range[0], blur_kernel_range[1])
+        if blur_kernel_size % 2 == 0:
+            blur_kernel_size += 1
+        h, w = gt_img.shape
+        width = np.random.randint(80, 250)
+        row_idx = np.random.randint(0, h - width)
+        region = [row_idx, row_idx + width, 0, w]
+        out, _ = add_motion_blur(out, kernel_size=blur_kernel_size, region=region)
+
+    # scanning jitter
+    if np.random.uniform() < scan_noise_prob:
+        sigma_jitter_x = np.random.uniform(sigma_jitter_x_range[0], sigma_jitter_x_range[1])
+        sigma_jitter_y = np.random.uniform(sigma_jitter_y_range[0], sigma_jitter_y_range[1])
+        jitter_map = generate_jitter_map(out, sigma_jitter_x, sigma_jitter_y, phi_x=0.5, phi_y=0.5)
+        out = add_scan_jitter(out, jitter_map[0], jitter_map[1])
+
+    # poisson noise
+    if scale_p_range[1] != 0:
+        out, p_noise = add_poisson_noise(out, lamb_range=scale_p_range)
+        gt, _ = add_poisson_noise(gt, lamb_range=scale_p_range, noise=p_noise)
+
+    # gaussian noise
+    out, g_noise = add_gaussian_noise(out, sigma_range=sigma_g_range)
+
+    # # row-line
+    # if np.random.uniform() < row_line_prob:
+    #     out = add_row_line_noise(out, row_factor_range=row_factor_range)
+    # # black pixel and zinger pixel
+    # if np.random.uniform() < 0.5:
+    #     out = add_black_pixel_noise(out, num_points=max_black_pixels)
+    #     out = add_zinger_pixel_noise(out, num_points=max_zinger_pixels)
+
+    out = np.clip((out * 255.0).round(), 0, 255)
+    gt = np.clip((gt * 255.0).round(), 0, 255)
+    return out, gt
+
+
+def deg_from_sim_decontamination(gt_img,
+                                 sigma_jitter_range=[2, 2],
+                                 scan_noise_prob=0.2,
+                                 blur_prob=0.2,
+                                 pollute_prob=0.5,
+                                 contrast_prob=0.5,
+                                 row_line_prob=0.5,
+                                 blur_kernel_range=[0., 0.],
+                                 mask_lambda1_range=[0.5, 0.9],
+                                 mask_lambda2_range=[0.7, 1],
+                                 contrast_range=[0.5, 1.2],
+                                 scale_p_range=[1., 1.],
+                                 sigma_g_range=[1., 1.],
+                                 row_factor_range=[0.5, 1.5],
+                                 max_black_pixels=0,
+                                 max_zinger_pixels=0):
     out = gt_img / 255.0
     # random contrast
     if np.random.uniform() < contrast_prob:
@@ -538,6 +611,36 @@ def deg_from_sim_depollute(gt_img,
 
     out = np.clip((out * 255.0).round(), 0, 255)
     gt = np.clip((gt * 255.0).round(), 0, 255)
+    return out, gt
+
+
+def deg_from_exp_sr(gt_img,
+                    resize_range=[0.25, 3.0],
+                    sigma_g_range=[1., 1.],
+                    resize_prob=[0.5, 0.5, 0.0]):
+    out = gt_img / 255.0
+
+    out = torch.from_numpy(out).unsqueeze(0).unsqueeze(0)
+
+    # random resize
+    updown_type = random.choices(['up', 'down', 'keep'], resize_prob)[0]
+    if updown_type == 'up':
+        scale = np.random.uniform(1, resize_range[1])
+    elif updown_type == 'down':
+        scale = np.random.uniform(resize_range[0], 1)
+    else:
+        scale = 1
+    mode = random.choice(['area', 'bilinear', 'bicubic'])
+    out = F.interpolate(out, scale_factor=scale, mode=mode)
+    # resize back
+    mode = random.choice(['area', 'bilinear', 'bicubic'])
+    out = F.interpolate(out, size=(gt_img.shape[0], gt_img.shape[1]), mode=mode)
+    out = out.detach().cpu().numpy().squeeze()
+    # gaussian noise
+    out, g_noise = add_gaussian_noise(out, sigma_range=sigma_g_range)
+
+    out = np.clip((out * 255.0).round(), 0, 255)
+    gt = gt_img
     return out, gt
 
 
@@ -601,6 +704,57 @@ def calucate_cxloss_folder(folder1, folder2, layer='conv5_4'):
     return cx_loss.item()
 
 
+def generate_jitter_map(img, sigma_x, sigma_y, phi_x, phi_y, local=False):
+    h, w = img.shape
+    map_size = (h, w)
+    delta_map_x = np.zeros(shape=map_size[1], dtype=float)
+    delta_map_y = np.zeros(shape=map_size[0], dtype=float)
+    if local:
+        length = np.random.randint(low=w // 4, high=w // 2)
+        start_x = np.random.randint(low=0, high=w - w // 4)
+        local_range_x = [x for x in range(start_x, start_x + length)]
+        print(local_range_x)
+        local_range_y = [y for y in range(h)]
+    else:
+        local_range_x = [x for x in range(w)]
+        local_range_y = [y for y in range(h)]
+
+    for i in range(map_size[1]):
+        if i in local_range_x:
+            if i == local_range_x[0]:
+                alpha_t = np.random.normal(0, sigma_x)
+                delta_map_x[i] = alpha_t / np.sqrt(1 - phi_x ** 2)
+            else:
+                alpha_t = np.random.normal(0, sigma_x)
+                delta_map_x[i] = phi_x * delta_map_x[i - 1] + alpha_t
+
+    for j in range(map_size[0]):
+        if j in local_range_y:
+            if j == local_range_y[0]:
+                alpha_t = np.random.normal(0, sigma_y)
+                delta_map_y[j] = alpha_t / np.sqrt(1 - phi_y ** 2)
+            else:
+                alpha_t = np.random.normal(0, sigma_y)
+                delta_map_y[j] = phi_y * delta_map_y[j - 1] + alpha_t
+    delta_map_x = delta_map_x.round().astype(int)
+    delta_map_y = delta_map_y.round().astype(int)
+    return delta_map_x, delta_map_y
+
+
+def add_scan_jitter(img, delta_map_x, delta_map_y):
+    h, w = img.shape
+    img_pix = img.squeeze()
+    img_new = img.copy()
+    for i in range(h):
+        for j in range(w):
+            try:
+                img_new[i][j] = img_pix[i - delta_map_x[i]][j - delta_map_y[j]]
+            except:
+                img_new[i][j] = img_pix[i][j]
+
+    return img_new
+
+
 def add_scan_noise(img, sigma_jitter=0.2, phi=np.pi / 4, f=1 / 20, delta_map_x=None, delta_map_y=None):
     h, w = img.shape
     img_pix = img.squeeze()
@@ -640,8 +794,9 @@ def make_deg_folder(n_thread, orig_folder,
     from tqdm import tqdm
 
     img_list = os.listdir(orig_folder)
-    pbar = tqdm(total=len(img_list), unit='image', desc='Extract')
-    pool = Pool(n_thread)
+    if n_thread != 1:
+        pbar = tqdm(total=len(img_list), unit='image', desc='Extract')
+        pool = Pool(n_thread)
     for idx, filename in enumerate(img_list):
         orig_path = os.path.join(orig_folder, filename)
         if save_gt_folder:
@@ -649,13 +804,15 @@ def make_deg_folder(n_thread, orig_folder,
         else:
             save_gt_path = None
         save_lq_path = os.path.join(save_lq_folder, filename)
-        # worker(idx, orig_path, save_gt_path, save_lq_path, repeats, mode, params)
-
-        pool.apply_async(worker, args=(idx, orig_path, save_gt_path, save_lq_path, repeats, mode, params),
-                         callback=lambda arg: pbar.update(1))
-    pool.close()
-    pool.join()
-    pbar.close()
+        if n_thread == 1:
+            worker(idx, orig_path, save_gt_path, save_lq_path, repeats, mode, params)  # single thread
+        else:
+            pool.apply_async(worker, args=(idx, orig_path, save_gt_path, save_lq_path, repeats, mode, params),
+                             callback=lambda arg: pbar.update(1))
+    if n_thread != 1:
+        pool.close()
+        pool.join()
+        pbar.close()
     print('All processes done.')
 
 
@@ -665,47 +822,54 @@ def worker(idx, orig_path, save_gt_path, save_lq_path, repeats, mode, params):
     # img_sim_pt = grayimg2tensor(img_sim)
     if mode == 'denoise':
         func = deg_from_sim_denoise
-    # elif mode == 'deblur':
-    #     func = deg_from_sim_deblur
-    elif mode == 'depollute':
-        func = deg_from_sim_depollute
+    elif mode == 'deblur':
+        func = deg_from_sim_deblur
+    elif mode == 'decontamination':
+        func = deg_from_sim_decontamination
     elif mode == 'll':
         func = deg_from_sim_ll
     elif mode == 'seg':
         func = deg_from_sim_all
+    elif mode == 'sr':
+        func = deg_from_exp_sr
     else:
         raise NotImplementedError
 
     for it in range(repeats):
-        img_deg, img_gt = func(img_sim,
-                               sigma_jitter_range=params['sigma_jitter_range'],
-                               scan_noise_prob=params['scan_noise_prob'],
-                               blur_prob=params['blur_prob'],
-                               pollute_prob=params['pollute_prob'],
-                               row_line_prob=params['row_line_prob'],
-                               blur_kernel_range=params['blur_kernel_range'],
-                               mask_lambda1_range=params['mask_lambda1_range'],
-                               mask_lambda2_range=params['mask_lambda2_range'],
-                               contrast_range=params['contrast_range'],
-                               scale_p_range=params['scale_p_range'],
-                               sigma_g_range=params['sigma_g_range'],
-                               row_factor_range=params['row_factor_range'],
-                               max_black_pixels=params['max_black_pixels'],
-                               max_zinger_pixels=params['max_zinger_pixels'])
-
-        # img_deg = tensor2inp(img_deg_pt)
-        # img_gt = tensor2inp(img_gt_pt)
+        if func != deg_from_exp_sr:
+            img_deg, img_gt = func(img_sim,
+                                   sigma_jitter_x_range=params['sigma_jitter_x_range'],
+                                   sigma_jitter_y_range=params['sigma_jitter_y_range'],
+                                   scan_noise_prob=params['scan_noise_prob'],
+                                   blur_prob=params['blur_prob'],
+                                   pollute_prob=params['pollute_prob'],
+                                   row_line_prob=params['row_line_prob'],
+                                   blur_kernel_range=params['blur_kernel_range'],
+                                   mask_lambda1_range=params['mask_lambda1_range'],
+                                   mask_lambda2_range=params['mask_lambda2_range'],
+                                   contrast_range=params['contrast_range'],
+                                   scale_p_range=params['scale_p_range'],
+                                   sigma_g_range=params['sigma_g_range'],
+                                   row_factor_range=params['row_factor_range'],
+                                   max_black_pixels=params['max_black_pixels'],
+                                   max_zinger_pixels=params['max_zinger_pixels'])
+        else:
+            img_deg, img_gt = func(img_sim,
+                                   resize_range=[0.25, 4.0],
+                                   sigma_g_range=[0.01, 0.05],
+                                   resize_prob=[0.5, 0.5, 0.0]
+                                   )
         if repeats != 1:
-            cv2.imwrite(save_lq_path.replace('.png', '_{}.png'.format(it + 1)), img_deg)
+            cv2.imwrite(save_lq_path.replace('.png', '_{}.png'.format(it + 1)), img_deg, [cv2.IMWRITE_PNG_COMPRESSION, 0])
             if save_gt_path:
                 if mode == 'seg':
                     filename = os.path.split(orig_path)[1]
                     shutil.copy(os.path.join(r'F:\Datasets\TEM-ImageNet-v1.3-master\noNoiseNoBackgroundSuperresolution',
                                              filename),
                                 os.path.join(save_gt_path, filename))
-                cv2.imwrite(save_gt_path.replace('.png', '_{}.png'.format(it + 1)), img_gt)
+                cv2.imwrite(save_gt_path.replace('.png', '_{}.png'.format(it + 1)), img_gt, [cv2.IMWRITE_PNG_COMPRESSION, 0])
         else:
-            cv2.imwrite(save_lq_path, img_deg)
+            cv2.imwrite(save_lq_path, img_deg, [cv2.IMWRITE_PNG_COMPRESSION, 0])
             if save_gt_path:
                 if mode == 'seg':
                     filename = os.path.split(orig_path)[1]
@@ -713,28 +877,43 @@ def worker(idx, orig_path, save_gt_path, save_lq_path, repeats, mode, params):
                                              filename),
                                 save_gt_path)
                 else:
-                    cv2.imwrite(save_gt_path, img_gt)
+                    cv2.imwrite(save_gt_path, img_gt, [cv2.IMWRITE_PNG_COMPRESSION, 0])
 
 
 if __name__ == '__main__':
     import json
 
     # setup_seed(12345)
-    with open('./deg_params/params_denoise_fromreal.json', 'r') as f:
-        params = json.load(f)
-    # name = 'TEMImageNet_val1000'
-    # task = 'Depollute'
-    # mode = 'depollute'
-    # make_deg_folder(n_thread=8, orig_folder=r'F:\Datasets\InstructSTEMIR\Original\TEMImageNet_val1000',
+    # with open('./deg_params/params_all.json', 'r') as f:
+    #     params = json.load(f)
+    # name = 'TEMImageNet1000'
+    # task = 'Segmentation'
+    # mode = 'seg'
+    # make_deg_folder(n_thread=8, orig_folder=r'F:\Datasets\InstructSTEMIR\Original\TEMImageNet1000',
     #                 save_gt_folder=r'F:\Datasets\InstructSTEMIR\{}\GT\{}'.format(task, name),
     #                 save_lq_folder=r'F:\Datasets\InstructSTEMIR\{}\LQ\{}'.format(task, name),
     #                 repeats=1,
     #                 mode=mode,
     #                 params=params)
 
-    make_deg_folder(n_thread=2, orig_folder=r'D:\Datasets\Pairs for test\HQ',
+
+    with open(r'./deg_params/params_denoise_exp.json', 'r') as f:
+        params = json.load(f)
+
+    '''
+    make_deg_folder(n_thread=2, orig_folder=r'F:\Datasets\InstructTEMSR\All_GT\TEMImageNet_sub500',
                     save_gt_folder=None,
-                    save_lq_folder=r'D:\Datasets\Pairs for test\LQ',
+                    save_lq_folder=r'F:\Datasets\InstructSTEMIR\test',
+                    mode='denoise',
+                    repeats=1,
+                    params=params)
+    '''
+
+    make_deg_folder(n_thread=6, orig_folder=r'F:\Datasets\InstSIP_test\Denoise\GT',
+                    save_gt_folder=None,
+                    save_lq_folder=r'F:\Datasets\InstSIP_test\Denoise\LQ',
                     repeats=1,
                     mode='denoise',
                     params=params)
+
+

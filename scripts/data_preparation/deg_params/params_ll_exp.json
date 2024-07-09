@@ -1,17 +1,18 @@
 {
-  "sigma_jitter_x_range": [0.0, 0.5],
+  "sigma_jitter_x_range": [0.5, 2],
   "sigma_jitter_y_range": [0.0, 0.25],
-  "scan_noise_prob": 0.5,
+  "scan_noise_prob": 0.1,
   "blur_prob": 0,
   "pollute_prob": 0,
   "contrast_prob": 1,
-  "row_line_prob": 0.3,
+  "row_line_prob": 0,
   "blur_kernel_range": [7, 21],
   "mask_lambda1_range": [0.5, 0.9],
   "mask_lambda2_range": [0.7,1],
-  "contrast_range": [0.5, 0.9],
-  "scale_p_range": [0.5, 3.5],
-  "sigma_g_range": [0.03, 0.1],
+  "contrast_range": [0.5, 0.8],
+  "scale_p_range": [100, 100],
+  "sigma_g_range": [0.01, 0.03],
   "row_factor_range": [0.5, 1.5],
-  "max_black_pixels": 10,
-  "max_zinger_pixels": 10}
+  "max_black_pixels": 0,
+  "max_zinger_pixels": 0}
+

@@ -1,0 +1,107 @@
+name: NAFNet-1118_1_1111_p256b16_Exp2kdenoise fft0.2 enlarge10
+model_type: SRModel
+scale: 1
+num_gpu: 1
+manual_seed: 12345
+
+gt_size: 256
+
+
+datasets:
+  train:
+    name: ExpimageDenoise_train2k
+    type: PairedImageDataset
+    color: gray
+    dataroot_gt: /mnt/d/Datasets/PairsEXP/HQ256/train
+    dataroot_lq: /mnt/d/Datasets/PairsEXP/LQ256/train
+    meta_info: ~
+
+    filename_tmpl: '{}'
+    io_backend:
+      type: disk
+    gt_size: 256
+    use_hflip: true
+    use_rot: true
+    # data loader
+    num_worker_per_gpu: 3
+    batch_size_per_gpu: 16
+    dataset_enlarge_ratio: 10
+    prefetch_mode: cuda
+    pin_memory: true
+
+  val:
+    name: ExpimageDenoise_val300
+    type: PairedImageDataset
+    color: gray
+    dataroot_gt: /mnt/d/Datasets/PairsEXP/HQ256/val
+    dataroot_lq: /mnt/d/Datasets/PairsEXP/LQ256/val
+    io_backend:
+      type: disk
+
+
+network_g:
+  type: NAFNet
+  width: 32
+  enc_blk_nums: [ 1, 1, 1, 8 ]
+  middle_blk_num: 1
+  dec_blk_nums: [ 1, 1, 1, 1 ]
+  img_channel: 1
+
+# path
+path:
+  pretrain_network_g: ~
+  strict_load_g: true
+  resume_state: ~
+
+# training settings
+train:
+  optim_g:
+    type: AdamW
+    lr: !!float 1e-4
+    weight_decay: 0.
+    betas: [0.9, 0.99]
+
+  scheduler:
+    type: MultiStepLR
+    milestones: [15000]
+    gamma: 0.5
+  total_iter: 30000
+  warmup_iter: -1
+
+  # losses
+  pixel_opt:
+    type: L1Loss
+    loss_weight: 1.0
+    reduction: mean
+  fft_opt:
+    type: FFTLoss
+    loss_weight: 0.02
+    reduction: mean
+
+val:
+ val_freq: !!float 1e3
+ save_img: true
+ metrics:
+   psnr: # metric name
+     type: calculate_psnr
+     crop_border: 0
+     test_y_channel: false
+   ssim:
+     type: calculate_ssim
+     crop_border: 0
+     test_y_channel: false
+
+# logging settings
+logger:
+  print_freq: 100
+  save_checkpoint_freq: !!float 1e3
+  use_tb_logger: true
+  wandb:
+    project: ~
+    resume_id: ~
+
+# dist training settings
+dist_params:
+  backend: nccl
+  port: 29500
+

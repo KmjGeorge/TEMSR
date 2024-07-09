@@ -23,7 +23,7 @@ def calucale_mean_std(path):
     mean /= length
     var /= length
     std = np.sqrt(var)
-    return mean, std
+    return mean, std, var
 
 
 def draw_avg_histogram(path, title, save_fig_path=None):
@@ -50,16 +50,12 @@ def draw_avg_histogram(path, title, save_fig_path=None):
 
 
 if __name__ == "__main__":
-    path1 = r'F:\Datasets\InstructSTEMIR\Denoise\GT\TEMImageNet500'
-    path2 = r'F:\Datasets\InstructSTEMIR\Denoise\LQ\TEMImageNet500'
-    path3 = r'F:\Datasets\InstructSTEMIR\Denoise\GT\TEMImageNet1000'
-    path4 = r'F:\Datasets\InstructSTEMIR\Denoise\LQ\TEMImageNet1000'
-    mean1, std1 = calucale_mean_std(path1)
-    mean2, std2 = calucale_mean_std(path2)
-    mean3, std3 = calucale_mean_std(path3)
-    mean4, std4 = calucale_mean_std(path4)
-    mean = (mean1 + mean2 + mean3 + mean4) / 4
-    std = (std1 + std2 + std3 + std4) / 4
+    path1 = r'F:\Datasets\InstructSTEMIR\Denoise\GT\TEMImageNet2kExp2k'
+    path2 = r'F:\Datasets\InstructSTEMIR\Denoise\LQ\TEMImageNet2kExp2k'
+    mean1, _, var1 = calucale_mean_std(path1)
+    mean2, _, var2 = calucale_mean_std(path2)
+    mean = (mean1 + mean2) / 2
+    std = np.sqrt((var1 + var2) / 2)
     print('mean=', mean, 'std=', std)
     # draw_avg_histogram(path, 'Atom Crops', 'F:\Datasets\partial-STEM_full_size\\atom_crop_hist.png')
 
