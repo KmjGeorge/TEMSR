@@ -50,12 +50,17 @@ def draw_avg_histogram(path, title, save_fig_path=None):
 
 
 if __name__ == "__main__":
-    path1 = r'F:\Datasets\InstructSTEMIR\Denoise\GT\TEMImageNet2kExp2k'
-    path2 = r'F:\Datasets\InstructSTEMIR\Denoise\LQ\TEMImageNet2kExp2k'
-    mean1, _, var1 = calucale_mean_std(path1)
-    mean2, _, var2 = calucale_mean_std(path2)
-    mean = (mean1 + mean2) / 2
-    std = np.sqrt((var1 + var2) / 2)
+    path = r'D:\Datasets\TEMSTEM256'
+    # path2 = r'F:\Datasets\InstructSTEMIR\Denoise\LQ\TEMImageNet2kExp2k'
+    mean_all = 0
+    var_all = 0
+    for dir in os.listdir(path):
+        mean, _, var = calucale_mean_std(os.path.join(path, dir))
+        mean_all += mean
+        var_all += var
+        print(dir, mean, var)
+    mean = mean_all / 4
+    std = np.sqrt(var_all / 4)
     print('mean=', mean, 'std=', std)
     # draw_avg_histogram(path, 'Atom Crops', 'F:\Datasets\partial-STEM_full_size\\atom_crop_hist.png')
 

@@ -134,10 +134,10 @@ def main():
     )
     parser.add_argument('--input', type=str,
                         # default=r'D:\Datasets\PairsEXP\LQ256\val',
-                        default=r'F:\Datasets\fuzaquexian',
+                        default=r'F:\Datasets\4',
                         help='output folder')
     parser.add_argument('--output', type=str,
-                        default='../show/SwinUNet_ft_p256w16b16_TEM2kExp2kdenoise fft0.1 norm freeze 2w2 fuzaquexian',
+                        default='../show/SwinUNet_ft_p256w16b16_TEM2kExp2kdenoise fft0.1 norm freeze 2w2 4',
                         help='output folder')
     parser.add_argument("--patch_size", type=int,
                         default=512)
@@ -215,8 +215,12 @@ def main():
         output_max, output_min = output.max(), output.min()
         output = (output - output_min) / (output_max - output_min)
         output = (np.clip(output, 0, 1) * 255).round().astype(np.uint8)
-        save_path = os.path.join(args.output,
-                                 filename.replace('.jpg', '_{}.png'.format(args.post_fix)))
+        if '.png' in filename:
+            save_path = os.path.join(args.output,
+                                     filename.replace('.png', '_InstructIR_{}.png'.format(inverse_dict[pred_cls])))
+        else:
+            save_path = os.path.join(args.output,
+                                     filename.replace('.jpg', '_InstructIR_{}.png'.format(inverse_dict[pred_cls])))
         cv2.imwrite(save_path, output)
 
         # cv2.imwrite(os.path.join(args.output, filename.replace('.jpg', '_LQ.jpg')), img_ori)

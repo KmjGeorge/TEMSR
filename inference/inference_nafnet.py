@@ -18,9 +18,9 @@ def main():
          r'F:\github\TEMSR\experiments\NAFNet-1118_1_1111_p256b16_Exp2kdenoise fft0.02 enlarge10\models\net_g_17000.pth'  # exp
         # r'F:\github\TEMSR\experiments\NAFNet-1118_1_1111_p256b16_TEMImagaNET1000denoise fft0.2 enlarge10\models\net_g_25000.pth'  # sim
     )
-    parser.add_argument('--input', type=str, default=r'F:\Datasets\S2',
+    parser.add_argument('--input', type=str, default=r'F:\Datasets\4',
                         help='output folder')
-    parser.add_argument('--output', type=str, default='../show/NAFNet-1118_1_1111_p256b16_Exp2kdenoise fft0.02 enlarge10 S2 exp',
+    parser.add_argument('--output', type=str, default='../show/NAFNet-1118_1_1111_p256b16_Exp2kdenoise fft0.02 enlarge10 S2 exp 4',
                         help='output folder')
     args = parser.parse_args()
 

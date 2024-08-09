@@ -22,13 +22,13 @@ def main():
     )
     parser.add_argument("--lm_path", type=str, default='../models/lm_head/model_head_256_dndbseglliesr_epoch40.pth',
                         help='embedding model head path')
-    parser.add_argument('--input', type=str, default=r'D:\Datasets\special\blur',
+    parser.add_argument('--input', type=str, default=r'F:\Datasets\4',
                         help='input folder')
-    parser.add_argument('--output', type=str, default='../show/InstructIR_new deblur test 17w5',
+    parser.add_argument('--output', type=str, default='../show/InstructIR_new 4 Sim',
                         help='output folder')
     parser.add_argument('--text_dim', type=int, default=256)
     parser.add_argument('--task_num', type=int, default=5)
-    parser.add_argument("--prompt", type=str, default='Remove the distortion and blur of this image.')
+    parser.add_argument("--prompt", type=str, default='Remove the noise of the image.')
     parser.add_argument('--save_gt', type=bool, default=True)
     args = parser.parse_args()
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -87,8 +87,12 @@ def main():
         if args.save_gt:
             if not os.path.exists(os.path.join(args.output, filename)):
                 shutil.copy(os.path.join(filefolder, filename), os.path.join(args.output, filename))
-        save_path = os.path.join(args.output,
-                                 filename.replace('.png', '_InstructIR_{}.png'.format(inverse_dict[pred_cls])))
+        if '.png' in filename:
+            save_path = os.path.join(args.output,
+                                     filename.replace('.png', '_InstructIR_{}.png'.format(inverse_dict[pred_cls])))
+        else:
+            save_path = os.path.join(args.output,
+                                     filename.replace('.jpg', '_InstructIR_{}.png'.format(inverse_dict[pred_cls])))
         cv2.imwrite(save_path, output)
         # cv2.imwrite(save_path.replace('.jpg', '_old.jpg'), output2)
         print('Saving output image to {}'.format(save_path))

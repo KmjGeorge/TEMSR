@@ -25,7 +25,7 @@ def main():
                         help='embedding model head path')
     parser.add_argument('--input', type=str, default=r'F:\Datasets\4',
                         help='input folder')
-    parser.add_argument('--output', type=str, default='../show/InstructIR 4 sim',
+    parser.add_argument('--output', type=str, default='../show/InstructIR 4 Sim',
                         help='output folder')
     parser.add_argument("--prompt", type=str, default='Please remove the noise of this image.')
     args = parser.parse_args()
@@ -84,8 +84,12 @@ def main():
 
         # if not os.path.exists(os.path.join(args.output, filename)):
         #     shutil.copy(os.path.join(filefolder, filename), os.path.join(args.output, filename))
-        save_path = os.path.join(args.output,
-                                 filename.replace('.png', '_InstructIR_{}.png'.format(inverse_dict[pred_cls])))
+        if '.png' in filename:
+            save_path = os.path.join(args.output,
+                                     filename.replace('.png', '_InstructIR_{}.png'.format(inverse_dict[pred_cls])))
+        else:
+            save_path = os.path.join(args.output,
+                                     filename.replace('.jpg', '_InstructIR_{}.png'.format(inverse_dict[pred_cls])))
         cv2.imwrite(save_path, output)
         # cv2.imwrite(save_path.replace('.jpg', '_old.jpg'), output2)
         print('Saving output image to {}'.format(save_path))
