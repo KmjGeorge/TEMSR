@@ -81,16 +81,15 @@ class InstructIRDataset(data.Dataset):
 
         # meta_info : <lq_path> <gt_path> <class> for train      <lq_path> <gt_path> <class> <instruct> for val
         self.meta_info = pd.read_csv(opt['meta_info'])
-        self.gt_paths, self.lq_paths, self.classes = self.meta_info['gt_path'], self.meta_info['lq_path'], self.meta_info['class']
+        self.gt_paths, self.lq_paths, self.classes = self.meta_info['gt_path'], self.meta_info['lq_path'], self.meta_info['Class']
 
         # instruct file: <instruct> <class>
         if opt.get('instruct_meta_info'):
             instruct_data = pd.read_csv(opt['instruct_meta_info'])
-            self.instructs_denoise = instruct_data[instruct_data['class'] == 'Denoise']['instruct']
-            self.instructs_deblur = instruct_data[instruct_data['class'] == 'Deblur']['instruct']
-            self.instructs_LLIE = instruct_data[instruct_data['class'] == 'LLIE']['instruct']
-            self.instructs_segmentation = instruct_data[instruct_data['class'] == 'Segmentation']['instruct']
-            self.instructs_sr = instruct_data[instruct_data['class'] == 'Super-Resolution']['instruct']
+            self.instructs_denoise = instruct_data[instruct_data['Class'] == 'Denoise']['Instruction']
+            self.instructs_deBG = instruct_data[instruct_data['Class'] == 'De-BG']['Instruction']
+            self.instructs_LLIE = instruct_data[instruct_data['Class'] == 'LLIE']['Instruction']
+            self.instructs_dedistortion = instruct_data[instruct_data['Class'] == 'De-distortion']['Instruction']
 
         self.embedding_model = LanguageModel(self.opt['lm_path']).eval()
         self.lm_head = LMHead(embedding_dim=384, hidden_dim=opt['text_dim'], num_classes=opt['task_num']).eval()
@@ -117,16 +116,15 @@ class InstructIRDataset(data.Dataset):
         if self.opt['phase'] == 'train':
             if lq_cls == 'Denoise':
                 lq_instruct = np.random.choice(self.instructs_denoise, 1, replace=False)[0]
-            elif lq_cls == 'Deblur':
-                lq_instruct = np.random.choice(self.instructs_deblur, 1, replace=False)[0]
+            elif lq_cls == 'De-BG':
+                lq_instruct = np.random.choice(self.instructs_deBG, 1, replace=False)[0]
             elif lq_cls == 'LLIE':
                 lq_instruct = np.random.choice(self.instructs_LLIE, 1, replace=False)[0]
-            elif lq_cls == 'Segmentation':
-                lq_instruct = np.random.choice(self.instructs_segmentation, 1, replace=False)[0]
-            elif lq_cls == 'Super-Resolution':
-                lq_instruct = np.random.choice(self.instructs_sr, 1, replace=False)[0]
+            elif lq_cls == 'De-distortion':
+                lq_instruct = np.random.choice(self.instructs_dedistortion, 1, replace=False)[0]
+
         else:
-            lq_instruct = self.meta_info['instruct'][index]
+            lq_instruct = self.meta_info['Instruction'][index]
 
         with torch.no_grad():
             instruct_embd, _ = self.lm_head(self.embedding_model(lq_instruct))
