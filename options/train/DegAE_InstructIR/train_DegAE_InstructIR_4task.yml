@@ -1,10 +1,11 @@
-name: InstructIR_32_2248_12_2222_p256b8_tdim256_2gpu_5task fft0.05
-model_type: InstructIRModel
+name: DegAE_InstructIR_TEM_t256_freeze
+model_type: DegAE_InstructIRModel
 scale: 1
 num_gpu: 1
 manual_seed: 12345
 
-gt_size: 256
+gt_size: 128
+
 
 datasets:
   train:
@@ -12,22 +13,22 @@ datasets:
     type: InstructIRDataset
     phase: train
     color: gray
-    dataset_root: /mnt/d/Datasets/InstSIP
-    meta_info: /mnt/d/Datasets/InstSIP/meta_info_train.csv
-    instruct_meta_info: /mnt/d/Datasets/InstSIP/prompts.csv
-    lm_path: ./models/bge-micro-v2
-    lm_head_weight_path: ./models/lm_head/model_head_256_dndbseglliesr_epoch40.pth
+    dataset_root: D:/Datasets/DegAEFT
+    meta_info: D:/Datasets/DegAEFT/meta_info_train.csv
+    instruct_meta_info: D:/Datasets/DegAEFT/inst_all.csv
+    lm_path: F:/github/TEMSR/models/bge-micro-v2
+    lm_head_weight_path: F:/github/TEMSR/models/lm_head/model_head_256_dn_db_dd_ll_epoch90.pth
     text_dim: 256
-    task_num: 5
+    task_num: 4
     io_backend:
       type: disk
-    gt_size: 256
+    gt_size: 128
     use_hflip: true
     use_rot: true
 
     # data loader
-    num_worker_per_gpu: 4
-    batch_size_per_gpu: 8
+    num_worker_per_gpu: 1
+    batch_size_per_gpu: 2
     dataset_enlarge_ratio: 10
     prefetch_mode: cuda
     pin_memory: true
@@ -37,32 +38,41 @@ datasets:
     type: InstructIRDataset
     phase: val
     color: gray
-    dataset_root: /mnt/d/Datasets/InstSIP
-    meta_info: /mnt/d/Datasets/InstSIP/meta_info_val.csv
-    lm_head_weight_path: ./models/lm_head/model_head_256_dndbseglliesr_epoch40.pth
+    dataset_root: D:/Datasets/DegAEFT
+    meta_info: D:/Datasets/DegAEFT/meta_info_val_small.csv
+    lm_path: F:/github/TEMSR/models/bge-micro-v2
+    lm_head_weight_path: F:/github/TEMSR/models/lm_head/model_head_256_dn_db_dd_ll_epoch90.pth
     text_dim: 256
-    task_num: 5
-    lm_path: ./models/bge-micro-v2
+    task_num: 4
     io_backend:
       type: disk
 
 network_g:
-  type: InstructIR
-  img_channel: 1
-  width: 32
-  enc_blk_nums: [2,2,4,8]
-  middle_blk_num: 12
-  dec_blk_nums: [2,2,2,2]
-  txtdim: 256
+  type: DegAE_InstructIR
+  inp_channels: 1
+  out_channels: 64
+  dim: 48
+  num_blocks: [ 4,6,6,8 ]
+  num_refinement_blocks: 4
+  heads: [ 1,2,4,8 ]
+  ffn_expansion_factor: 2.66
+  bias: False
+  LayerNorm_type: WithBias
+  dual_pixel_task: False
+  global_residual: False
+  text_dim: 256
+  decoder_blk_nums: [2,2,2,2]
 
 # path
 path:
+  pretrain_network_encoder: F:/Project/DegAE_DegradationAutoencoder-main/Pretrain_DegAE_Restormer/80000_PretrainEncoder.pth
   pretrain_network_g: ~
   strict_load_g: true
-  resume_state: /mnt/f/github/TEMSR/experiments/InstructIR_32_2248_12_2222_p256b8_tdim256_2gpu_5task fft0.05/training_states/140000.state
+  resume_state: ~
 
 # training settings
 train:
+  freeze_encoder: true
   optim_g:
     type: AdamW
     lr: !!float 1e-4
@@ -72,8 +82,8 @@ train:
   scheduler:
     type: MultiStepLR
     gamma: 0.5
-    milestones: [50000, 100000]
-  total_iter: 200000
+    milestones: [100000, 200000]
+  total_iter: 300000
   warmup_iter: -1
 
   # losses
@@ -102,7 +112,7 @@ val:
 
 # logging settings
 logger:
-  print_freq: 1000
+  print_freq: 200
   save_checkpoint_freq: !!float 5e3
   use_tb_logger: true
   wandb:

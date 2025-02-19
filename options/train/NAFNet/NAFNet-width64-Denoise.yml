@@ -50,7 +50,7 @@ network_g:
 path:
   pretrain_network_g: ~
   strict_load_g: true
-  resume_state: ~
+  resume_state: experiments/NAFNet-2248_12_2222_p128b4_Denoise/training_states/60000.state
 
 # training settings
 train:

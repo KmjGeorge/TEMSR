@@ -124,7 +124,6 @@ class NAFBlock(nn.Module):
 
 @ARCH_REGISTRY.register()
 class NAFNet(nn.Module):
-
     def __init__(self, img_channel=3, width=16, middle_blk_num=1, enc_blk_nums=[], dec_blk_nums=[]):
         super().__init__()
 
@@ -206,7 +205,7 @@ class NAFNet(nn.Module):
         x = F.pad(x, (0, mod_pad_w, 0, mod_pad_h))
         return x
 
-@ARCH_REGISTRY.register()
+# @ARCH_REGISTRY.register()
 class NAFNetLocal(Local_Base, NAFNet):
     def __init__(self, *args, train_size=(1, 3, 256, 256), fast_imp=False, **kwargs):
         Local_Base.__init__(self)
@@ -236,7 +235,7 @@ if __name__ == '__main__':
     net = NAFNet(img_channel=img_channel, width=width, middle_blk_num=middle_blk_num,
                  enc_blk_nums=enc_blks, dec_blk_nums=dec_blks).cuda()
 
-    inp_shape = (1, 256, 256)
+    inp_shape = (1, 128, 128)
     summary(net, inp_shape)      # 1118 2 1111, Total params:   9,611,105
                                  # 2248 12 2222 Total params: 115,941,185
     # for i in range(100):

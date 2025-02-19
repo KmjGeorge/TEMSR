@@ -13,7 +13,6 @@ from basicsr.data.instructir_dataset import LanguageModel, LMHead
 
 
 def main():
-
     parser = argparse.ArgumentParser()
     parser.add_argument(
         '--model_path',
@@ -23,14 +22,14 @@ def main():
     )
     parser.add_argument("--lm_path", type=str, default='../models/lm_head/model_head_512_epoch40.pth',
                         help='embedding model head path')
-    parser.add_argument('--input', type=str, default=r'F:\Datasets\4',
+    parser.add_argument('--input', type=str, default=r'F:\Datasets\5stem\Depollute',
                         help='input folder')
-    parser.add_argument('--output', type=str, default='../show/InstructIR 4 Sim',
+    parser.add_argument('--output', type=str, default='../show/InstructIR 5 Sim',
                         help='output folder')
     parser.add_argument("--prompt", type=str, default='Please remove the noise of this image.')
     args = parser.parse_args()
     # device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    device = 'cpu'
+    device = 'cuda'
     # set up model
     model = InstructIR(img_channel=1, width=32, enc_blk_nums=[2, 2, 4, 8], middle_blk_num=12, dec_blk_nums=[2, 2, 2, 2],
                        txtdim=512)

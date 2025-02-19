@@ -880,6 +880,14 @@ def worker(idx, orig_path, save_gt_path, save_lq_path, repeats, mode, params):
                     cv2.imwrite(save_gt_path, img_gt, [cv2.IMWRITE_PNG_COMPRESSION, 0])
 
 
+def jitter_test(sigma_jitter_x_range=[5, 20], sigma_jitter_y_range=[0, 0]):
+    image = cv2.imread(r'F:\Datasets\AID\train\Church\church_43.png', 0)
+    sigma_jitter_x = np.random.uniform(sigma_jitter_x_range[0], sigma_jitter_x_range[1])
+    sigma_jitter_y = np.random.uniform(sigma_jitter_y_range[0], sigma_jitter_y_range[1])
+    jitter_map = generate_jitter_map(image, sigma_jitter_x, sigma_jitter_y, phi_x=0.5, phi_y=0.5)
+    out = add_scan_jitter(image, jitter_map[0], jitter_map[1])
+    return out
+
 if __name__ == '__main__':
     import json
 
@@ -896,18 +904,10 @@ if __name__ == '__main__':
     #                 mode=mode,
     #                 params=params)
 
-
+    '''
     with open(r'./deg_params/params_denoise_exp.json', 'r') as f:
         params = json.load(f)
 
-    '''
-    make_deg_folder(n_thread=2, orig_folder=r'F:\Datasets\InstructTEMSR\All_GT\TEMImageNet_sub500',
-                    save_gt_folder=None,
-                    save_lq_folder=r'F:\Datasets\InstructSTEMIR\test',
-                    mode='denoise',
-                    repeats=1,
-                    params=params)
-    '''
 
     make_deg_folder(n_thread=6, orig_folder=r'F:\Datasets\InstSIP_test\Denoise\GT',
                     save_gt_folder=None,
@@ -915,5 +915,9 @@ if __name__ == '__main__':
                     repeats=1,
                     mode='denoise',
                     params=params)
+    '''
+    out = jitter_test()
+    cv2.imshow('out', out)
+    cv2.waitKey(0)
 
 

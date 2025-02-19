@@ -63,3 +63,10 @@ class MSRResNet(nn.Module):
         base = F.interpolate(x, scale_factor=self.upscale, mode='bilinear', align_corners=False)
         out += base
         return out
+
+
+if __name__ == '__main__':
+    from torchsummary import summary
+
+    model = MSRResNet(num_in_ch=1, num_out_ch=1, upscale=4).cuda()
+    summary(model, (1, 64, 64))

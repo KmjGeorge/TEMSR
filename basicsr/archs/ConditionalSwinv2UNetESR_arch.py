@@ -339,7 +339,7 @@ class SwinTransformerBlock(nn.Module):
 
 
 class ConditionalSwinTransformerBlock(nn.Module):
-    r""" Swin Transformer Block.
+    r""" Swin Transformer Block with Condition and HF injection
 
     Args:
         dim (int): Number of input channels.
@@ -722,7 +722,7 @@ class BasicLayer_up(nn.Module):
         return x
 
 
-class ConditionalBasicLayer_up(nn.Module):
+class ConditionalBasicLayerESR_up(nn.Module):
     """ A basic Swin Transformer layer for one stage.
 
     Args:
@@ -763,20 +763,34 @@ class ConditionalBasicLayer_up(nn.Module):
                                             drop_path=drop_path[i] if isinstance(drop_path, list) else drop_path,
                                             norm_layer=AdaLN)
             for i in range(depth)])
-
+        self.hf_transformation = nn.ModuleList([
+            SwinTransformerBlock(dim=dim, input_resolution=input_resolution,
+                                 num_heads=num_heads, window_size=window_size,
+                                 shift_size=0 if (i % 2 == 0) else window_size // 2,
+                                 mlp_ratio=mlp_ratio,
+                                 qkv_bias=qkv_bias,
+                                 drop=drop, attn_drop=attn_drop,
+                                 drop_path=drop_path[i] if isinstance(drop_path, list) else drop_path,
+                                 norm_layer=nn.LayerNorm)
+            for i in range(2)])
+        self.hf_scale = nn.Sequential(nn.Linear(dim, dim), nn.Sigmoid())
+        self.norm_last = nn.LayerNorm(dim)
         # patch merging layer
         if upsample is not None:
             self.upsample = PatchExpand(input_resolution, dim=dim, dim_scale=2, norm_layer=norm_layer)
         else:
             self.upsample = None
 
-    def forward(self, x, c):
+    def forward(self, x, x_h, c):
         c = self.cond_proj(c)
+        x_h = self.hf_transformation(x_h)
         for blk in self.blocks:
             if self.use_checkpoint:
                 x = checkpoint.checkpoint(blk, x)
             else:
                 x = blk(x, c)
+        scale = self.hf_scale(c)
+        x = self.norm_last(x + x_h * scale)
         if self.upsample is not None:
             x = self.upsample(x)
         return x
@@ -829,8 +843,9 @@ class PatchEmbed(nn.Module):
             flops += Ho * Wo * self.embed_dim
         return flops
 
+
 @ARCH_REGISTRY.register()
-class ConditionalSwinv2UNet(nn.Module):
+class ConditionalSwinv2UNetESR(nn.Module):
     r""" Swin Transformer
         A PyTorch impl of : `Swin Transformer: Hierarchical Vision Transformer using Shifted Windows`  -
           https://arxiv.org/pdf/2103.14030
@@ -857,11 +872,11 @@ class ConditionalSwinv2UNet(nn.Module):
     """
 
     def __init__(self, img_size=224, patch_size=4, in_chans=3,
-                 embed_dim=96, depths=[2, 2, 2, 2], depths_decoder=[1, 2, 2, 2], num_heads=[3, 6, 12, 24],
+                 embed_dim=96, cond_dim=128, depths=[2, 2, 2, 2], depths_decoder=[1, 2, 2, 2], num_heads=[3, 6, 12, 24],
                  window_size=7, mlp_ratio=4., qkv_bias=True, qk_scale=None,
                  drop_rate=0., attn_drop_rate=0., drop_path_rate=0.1,
                  norm_layer=nn.LayerNorm, ape=False, patch_norm=True,
-                 use_checkpoint=False, freeze_encoder=False, cond_dim=256, **kwargs):
+                 use_checkpoint=False, freeze_encoder=False, **kwargs):
         super().__init__()
 
         self.num_layers = len(depths)
@@ -921,23 +936,25 @@ class ConditionalSwinv2UNet(nn.Module):
                                       patches_resolution[1] // (2 ** (self.num_layers - 1 - i_layer))),
                     dim=int(embed_dim * 2 ** (self.num_layers - 1 - i_layer)), dim_scale=2, norm_layer=norm_layer)
             else:
-                layer_up = ConditionalBasicLayer_up(dim=int(embed_dim * 2 ** (self.num_layers - 1 - i_layer)),
-                                                    input_resolution=(
-                                                        patches_resolution[0] // (2 ** (self.num_layers - 1 - i_layer)),
-                                                        patches_resolution[1] // (
-                                                                2 ** (self.num_layers - 1 - i_layer))),
-                                                    depth=depths_decoder[(self.num_layers - 1 - i_layer)],
-                                                    num_heads=num_heads[(self.num_layers - 1 - i_layer)],
-                                                    window_size=window_size,
-                                                    mlp_ratio=self.mlp_ratio,
-                                                    qkv_bias=qkv_bias,
-                                                    drop=drop_rate, attn_drop=attn_drop_rate,
-                                                    drop_path=dpr[sum(depths[:(self.num_layers - 1 - i_layer)]):sum(
-                                                        depths[:(self.num_layers - 1 - i_layer) + 1])],
-                                                    norm_layer=norm_layer,
-                                                    upsample=PatchExpand if (i_layer < self.num_layers - 1) else None,
-                                                    use_checkpoint=use_checkpoint,
-                                                    cond_dim=cond_dim)
+                layer_up = ConditionalBasicLayerESR_up(dim=int(embed_dim * 2 ** (self.num_layers - 1 - i_layer)),
+                                                       cond_dim=cond_dim,
+                                                       input_resolution=(
+                                                           patches_resolution[0] // (
+                                                                   2 ** (self.num_layers - 1 - i_layer)),
+                                                           patches_resolution[1] // (
+                                                                   2 ** (self.num_layers - 1 - i_layer))),
+                                                       depth=depths_decoder[(self.num_layers - 1 - i_layer)],
+                                                       num_heads=num_heads[(self.num_layers - 1 - i_layer)],
+                                                       window_size=window_size,
+                                                       mlp_ratio=self.mlp_ratio,
+                                                       qkv_bias=qkv_bias,
+                                                       drop=drop_rate, attn_drop=attn_drop_rate,
+                                                       drop_path=dpr[sum(depths[:(self.num_layers - 1 - i_layer)]):sum(
+                                                           depths[:(self.num_layers - 1 - i_layer) + 1])],
+                                                       norm_layer=norm_layer,
+                                                       upsample=PatchExpand if (
+                                                               i_layer < self.num_layers - 1) else None,
+                                                       use_checkpoint=use_checkpoint)
             self.layers_up.append(layer_up)
             self.concat_back_dim.append(concat_linear)
 
@@ -999,8 +1016,9 @@ class ConditionalSwinv2UNet(nn.Module):
                 x = layer_up(x)
             else:
                 x = torch.cat([x, x_downsample[3 - inx]], -1)
+                x_h = x - x_downsample[3 - inx]
                 x = self.concat_back_dim[inx](x)
-                x = layer_up(x, c)
+                x = layer_up(x, x_h, c)
 
         x = self.norm_up(x)  # B L C
 
@@ -1034,29 +1052,54 @@ class ConditionalSwinv2UNet(nn.Module):
         return flops
 
 
-
-
 if __name__ == "__main__":
     from torchsummary import summary
 
-    model = ConditionalSwinv2UNet(img_size=256,
-                       patch_size=4,
-                       in_chans=1,
-                       num_classes=1,
-                       embed_dim=128,
-                       depths=[2, 2, 18, 2],
-                       depths_decoder=[2, 2, 2, 2],
-                       num_heads=[4, 8, 16, 32],
-                       window_size=16,
-                       mlp_ratio=4,
-                       qkv_bias=True,
-                       drop_rate=0,
-                       drop_path_rate=0.1,
-                       ape=False,
-                       patch_norm=True,
-                       freeze_encoder=False).cuda()
+    '''
+    model = ConditionalSwinv2UNetESR(img_size=256,
+                                     patch_size=4,
+                                     in_chans=1,
+                                     num_classes=1,
+                                     embed_dim=128,
+                                     depths=[2, 2, 18, 2],
+                                     depths_decoder=[2, 2, 2, 2],
+                                     num_heads=[4, 8, 16, 32],
+                                     window_size=16,
+                                     mlp_ratio=4,
+                                     qkv_bias=True,
+                                     drop_rate=0,
+                                     drop_path_rate=0.1,
+                                     ape=False,
+                                     patch_norm=True,
+                                     freeze_encoder=False).cuda()
+                                     
+    summary(model, [(1, 256, 256), (512,)])  
+    '''
 
-    summary(model, [(1, 256, 256), (512,)])   # 13,167,232 for decoder
-                                                       # 79,093,760 for all
+    # encoder as low-pass filter
+    # x - encoder(x) as hf component, transforming, and injection
+    # instruction decides the injection power
+    model = ConditionalSwinv2UNetESR(img_size=64,
+                                     patch_size=4,
+                                     in_chans=1,
+                                     num_classes=1,
+                                     embed_dim=64,
+                                     cond_dim=128,
+                                     depths=[2, 2, 18, 2],
+                                     depths_decoder=[2, 2, 2, 2],
+                                     num_heads=[4, 8, 16, 32],
+                                     window_size=8,
+                                     mlp_ratio=4,
+                                     qkv_bias=True,
+                                     drop_rate=0,
+                                     drop_path_rate=0.1,
+                                     ape=False,
+                                     patch_norm=True,
+                                     freeze_encoder=False).cuda()
+
+    summary(model, [(1, 64, 64), (128,)])
+
+    # 13,167,232 for decoder
+    # 79,093,760 for all
     # for k in model.state_dict().keys():
     #     print(k)

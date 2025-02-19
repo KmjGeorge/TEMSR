@@ -18,11 +18,11 @@ def main():
         '--model_path',
         type=str,
         default=  # noqa: E251
-        '../output/InstructIR_p256b8_2gpu_sim/models/net_g_110000.pth'
+        'F:/github/TEMSR_Platform/output/InstructIR_p256b8_2gpu_sim/models/net_g_110000.pth'
     )
-    parser.add_argument("--lm_path", type=str, default='../models/lm_head/model_head_70.pth',
+    parser.add_argument("--lm_path", type=str, default='F:/github/TEMSR_Platform/models/lm_head/model_head_70.pth',
                         help='embedding model head path')
-    parser.add_argument('--output', type=str, default='../show',
+    parser.add_argument('--output', type=str, default='../show/InstructIR_p256b8_2gpu_sim 5',
                         help='output folder')
 
     args = parser.parse_args()
@@ -88,6 +88,8 @@ def main():
 
                 if not os.path.exists(os.path.join(args.output, filename)):
                     shutil.copy(os.path.join(filefolder, filename), os.path.join(args.output, filename))
+                if '.jpg' in filename:
+                    filename = filename.replace('.jpg', '.png')
                 save_path = os.path.join(args.output, filename.replace('.png','_InstructIR_{}.png'.format(inverse_dict[pred_cls])))
                 cv2.imwrite(save_path,  output)
                 # cv2.imwrite(save_path.replace('.png', '_old.png'), output2)

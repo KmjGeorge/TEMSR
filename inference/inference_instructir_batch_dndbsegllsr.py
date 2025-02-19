@@ -22,13 +22,13 @@ def main():
     )
     parser.add_argument("--lm_path", type=str, default='../models/lm_head/model_head_256_dndbseglliesr_epoch40.pth',
                         help='embedding model head path')
-    parser.add_argument('--input', type=str, default=r'F:\Datasets\4',
+    parser.add_argument('--input', type=str, default=r'F:\Datasets\5stem\png',
                         help='input folder')
-    parser.add_argument('--output', type=str, default='../show/InstructIR_new 4 Sim',
+    parser.add_argument('--output', type=str, default='../show/InstructIR_new 5 Sim',
                         help='output folder')
     parser.add_argument('--text_dim', type=int, default=256)
     parser.add_argument('--task_num', type=int, default=5)
-    parser.add_argument("--prompt", type=str, default='Remove the noise of the image.')
+    parser.add_argument("--prompt", type=str, default='Enhance the light of the image.')
     parser.add_argument('--save_gt', type=bool, default=True)
     args = parser.parse_args()
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')

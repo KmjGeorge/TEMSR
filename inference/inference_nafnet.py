@@ -15,12 +15,13 @@ def main():
         '--model_path',
         type=str,
         default=  # noqa=E251
-         r'F:\github\TEMSR\experiments\NAFNet-1118_1_1111_p256b16_Exp2kdenoise fft0.02 enlarge10\models\net_g_17000.pth'  # exp
-        # r'F:\github\TEMSR\experiments\NAFNet-1118_1_1111_p256b16_TEMImagaNET1000denoise fft0.2 enlarge10\models\net_g_25000.pth'  # sim
+        # r'F:\github\TEMSR\experiments\NAFNet-1118_1_1111_p256b16_Exp2kdenoise fft0.02 enlarge10\models\net_g_17000.pth'  # exp
+         r'F:\github\TEMSR\experiments\NAFNet-1118_1_1111_p256b16_TEMImagaNET1000denoise fft0.2 enlarge10\models\net_g_25000.pth'  # sim
+        # r'F:\github\TEMSR\experiments\NAFNet-1118_1_1111_p256b16_TEMImagaNETdeBG fft0.2 enlarge10\models\net_g_60000.pth'   # denoise deblur TEMImageNet
     )
-    parser.add_argument('--input', type=str, default=r'F:\Datasets\4',
+    parser.add_argument('--input', type=str, default=r'F:\Datasets\5stem\depollute',
                         help='output folder')
-    parser.add_argument('--output', type=str, default='../show/NAFNet-1118_1_1111_p256b16_Exp2kdenoise fft0.02 enlarge10 S2 exp 4',
+    parser.add_argument('--output', type=str, default='../show/NAFNet-1118_1_1111_p256b8_TEMImageNetDeBG fft0.02 5',
                         help='output folder')
     args = parser.parse_args()
 

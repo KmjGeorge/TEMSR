@@ -9,11 +9,11 @@ gt_size: 256
 
 datasets:
   train:
-    name: TEMImageNet_Denoise_1000
+    name: TEMImageNet_Denoise_Full
     type: PairedImageDataset
     color: gray
-    dataroot_gt: /mnt/f/Datasets/TEM-ImageNet-v1.3-master/image/train
-    dataroot_lq: /mnt/f/Datasets/TEM-ImageNet-v1.3-master/noBackgroundnoNoise/train
+    dataroot_gt: /mnt/f/Datasets/TEM-ImageNet-v1.3-master/noBackgroundnoNoise/train
+    dataroot_lq: /mnt/f/Datasets/TEM-ImageNet-v1.3-master/image/train
     meta_info: ~
 
     filename_tmpl: '{}'
@@ -23,8 +23,8 @@ datasets:
     use_hflip: true
     use_rot: true
     # data loader
-    num_worker_per_gpu: 6
-    batch_size_per_gpu: 4
+    num_worker_per_gpu: 4
+    batch_size_per_gpu: 8
     dataset_enlarge_ratio: 10
     prefetch_mode: cuda
     pin_memory: true
@@ -33,8 +33,8 @@ datasets:
     name: TEMImageNet_DeBG_val300
     type: PairedImageDataset
     color: gray
-    dataroot_gt: /mnt/f/Datasets/TEM-ImageNet-v1.3-master\image\val
-    dataroot_lq: /mnt/f/Datasets/InstructSTEMIR/Denoise/LQ/TEMImageNet500
+    dataroot_gt: /mnt/f/Datasets/TEM-ImageNet-v1.3-master/noBackgroundnoNoise/val
+    dataroot_lq: /mnt/f/Datasets/TEM-ImageNet-v1.3-master/image/val
     io_backend:
       type: disk
 
@@ -51,7 +51,7 @@ network_g:
 path:
   pretrain_network_g: ~
   strict_load_g: true
-  resume_state: /mnt/f/github/TEMSR/experiments/NAFNet-1118_1_1111_p256b16_TEMImagaNET1000denoise fft0.2 enlarge10/training_states/20000.state
+  resume_state: ~
 
 # training settings
 train:
@@ -63,9 +63,9 @@ train:
 
   scheduler:
     type: MultiStepLR
-    milestones: [10000]
+    milestones: [100000]
     gamma: 0.5
-  total_iter: 30000
+  total_iter: 100000
   warmup_iter: -1
 
   # losses
@@ -79,7 +79,7 @@ train:
     reduction: mean
 
 val:
- val_freq: !!float 1e3
+ val_freq: !!float 1e4
  save_img: true
  metrics:
    psnr: # metric name
@@ -93,8 +93,8 @@ val:
 
 # logging settings
 logger:
-  print_freq: 100
-  save_checkpoint_freq: !!float 1e3
+  print_freq: 200
+  save_checkpoint_freq: !!float 1e4
   use_tb_logger: true
   wandb:
     project: ~

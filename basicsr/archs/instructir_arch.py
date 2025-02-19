@@ -26,7 +26,7 @@ class ICB(nn.Module):
         f = self.block(f)  # 3) block feature enhancement
         return f + x
 
-@ARCH_REGISTRY.register()
+# @ARCH_REGISTRY.register()
 class InstructIR(nn.Module):
     """
     InstructIR model using NAFNet (ECCV 2022) as backbone.
@@ -128,5 +128,5 @@ if __name__ == '__main__':
 
     model = InstructIR(img_channel=1, width=32, enc_blk_nums=[1, 1, 1, 8], middle_blk_num=1, dec_blk_nums=[1, 1, 1, 1],
                        txtdim=512).cuda()
-    summary(model, input_size=[(1, 256, 256), (512,)])  # Total params: 9,501,025  32 1118 1 1111
-                                                        # Total params: 30,879,649 32 2228 12 2222
+    summary(model, input_size=[(1, 256, 256), (512,)])  # Text 512: Total params: 9,501,025  32 1118 1 1111
+                                                        # Text 512 Total params: 30,879,649 32 2228 12 2222

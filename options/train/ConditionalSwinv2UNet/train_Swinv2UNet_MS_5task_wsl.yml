@@ -1,4 +1,4 @@
-name: CSwinUNet_MS_p256w16b16_2gpu_nofreeze_5task
+name: CSwinUNet_AT_p256w16b16_2gpu_nofreeze_5task
 model_type: SwinUNetModel
 scale: 1
 num_gpu: 2
@@ -70,11 +70,12 @@ network_g:
 
 # path
 path:
-  pretrain_network_g: ./experiments/CSwinUNet_MS_p256w16b16_2gpu_nofreeze_5task_archived_20240919_194943/models/net_g_10000.pth
-  pretrain_network_g_e: ./models/swinv2/MS_ckpt_epoch_60.pth
+  pretrain_network_g: ~
+  # pretrain_network_g_e: ./models/swinv2/MS_ckpt_epoch_60.pth
+  pretrain_network_g_e: ./models/swinv2/Atom_ckpt_epoch_70.pth
   param_key_g: model
   strict_load_g: true
-  resume_state: ~
+  resume_state: /mnt/f/github/TEMSR/experiments/CSwinUNet_AT_p256w16b16_2gpu_nofreeze_5task/training_states/130000.state
 
 # training settings
 train:

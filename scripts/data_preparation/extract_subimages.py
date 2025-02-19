@@ -44,10 +44,10 @@ def main():
     opt['compression_level'] = 0
 
     # HR images
-    opt['input_folder'] = r'D:\Datasets\Others'
-    opt['save_folder'] = r'D:\Datasets\TEMSTEM256\Others'
-    opt['crop_size'] = 256
-    opt['step'] = 256
+    opt['input_folder'] = r'F:\Datasets\partial-STEM_full_size\cnn\atom\pred\positive'
+    opt['save_folder'] = r'F:\Datasets\partial-STEM_full_size\cnn\atom\pred\positive_crop512'
+    opt['crop_size'] = 512
+    opt['step'] = 512
     opt['thresh_size'] = 0
     extract_subimages(opt)
 
@@ -134,6 +134,7 @@ def worker(path, opt):
     else:
         img = cv2.imread(path, 0)
     h, w = img.shape[0:2]
+    # if max(h, w) > 512:
     h_space = np.arange(0, h - crop_size + 1, step)
     if h - (h_space[-1] + crop_size) > thresh_size:
         h_space = np.append(h_space, h - crop_size)
