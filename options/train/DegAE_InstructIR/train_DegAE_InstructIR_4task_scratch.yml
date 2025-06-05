@@ -1,4 +1,4 @@
-name: DegAE_InstructIR_TEM_t256_p128b4_full
+name: DegAE_InstructIR_TEM_t256_p128b4_scratch
 model_type: DegAE_InstructIRModel
 scale: 1
 num_gpu: 1
@@ -107,7 +107,7 @@ network_g:
 # path
 path:
   pretrain_network_g: ~
-  pretrain_network_encoder: /root/autodl-tmp/50w/500000_PretrainEncoder.pth
+  pretrain_network_encoder: ~
   strict_load_g: true
   resume_state: ~
 

@@ -40,13 +40,14 @@ class AtomSegNet(nn.Module):
         self.conv9_2 = nn.Conv2d(64, 64, 3, padding=1)
         self.bn9_1 = nn.BatchNorm2d(64)
         self.bn9_2 = nn.BatchNorm2d(64)
-        self.conv9_3 = nn.Conv2d(64, colordim, 1)
+        self.conv9_3 = nn.Conv2d(64, 64, 3)
         # self.bn9_3 = nn.BatchNorm2d(colordim)
-        self.bn9 = nn.BatchNorm2d(colordim)
+        self.bn9 = nn.BatchNorm2d(64)
         self.maxpool = nn.MaxPool2d(2, stride=2, return_indices=False, ceil_mode=False)
         self.upsample = nn.UpsamplingBilinear2d(scale_factor=2)
         self._initialize_weights()
 
+        self.out = nn.Conv2d(64, colordim, 3, 1, 1)
         # self.input_layer = nn.Sequential(self.conv1_1, self.bn1_1, nn.ReLU(),self.conv1_2, self.bn1_2,  nn.ReLU())
         #
         # self.down1 = nn.Sequential(self.conv2_1, self.bn2_1, nn.ReLU(), self.conv2_2, self.bn2_2, nn.ReLU())
@@ -70,9 +71,9 @@ class AtomSegNet(nn.Module):
         xup = self.bn7(self.upconv7(self.upsample(xup)))
         xup = self.bn7_out(torch.cat((x1, xup), 1))
 
-        xup = F.relu(self.conv9_3(F.relu(self.bn9_2(self.conv9_2(F.relu(self.bn9_1(self.conv9_1(xup))))))))
-
-        return F.sigmoid(self.bn9(xup))
+        xup = F.relu(self.bn9_2(self.conv9_2(F.relu(self.bn9_1(self.conv9_1(xup))))))
+        
+        return self.out(self.bn9(xup))
 
     def _initialize_weights(self):
         for m in self.modules():
@@ -84,3 +85,9 @@ class AtomSegNet(nn.Module):
             elif isinstance(m, nn.BatchNorm2d):
                 m.weight.data.fill_(1)
                 m.bias.data.zero_()
+
+
+if __name__ == '__main__':
+    from torchsummary import summary
+    model = AtomSegNet().cuda()
+    summary(model, (1, 128, 128))

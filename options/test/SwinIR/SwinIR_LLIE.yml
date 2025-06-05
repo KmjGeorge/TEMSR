@@ -1,0 +1,55 @@
+# general settings
+name: SwinIR_LLIE_P96W8B4
+model_type: SwinIRModel
+scale: 1
+num_gpu: 1
+manual_seed: 12345
+gt_size: 96
+
+# dataset and data loader settings
+datasets:
+  test_1:
+    name: Warwick_LLIE
+    type: PairedImageDataset
+    color: gray
+    dataroot_gt: D:/Datasets/DegAEFT/HQ/val
+    dataroot_lq: D:/Datasets/DegAEFT/LLIE/val
+    io_backend:
+      type: disk
+
+# network structures
+network_g:
+  type: SwinIR
+  upscale: 1
+  in_chans: 1
+  img_size: 128
+  window_size: 8
+  img_range: 1.
+  depths: [6, 6, 6, 6, 6, 6]
+  embed_dim: 180
+  num_heads: [6, 6, 6, 6, 6, 6]
+  mlp_ratio: 2
+  upsampler: 'LLIE'
+  resi_connection: '1conv'
+
+# path
+path:
+  pretrain_network_g: F:\github\TEMSR\experiments\DegAE_FT\SwinIR_LLIE\models\net_g_320000.pth
+  strict_load_g: true
+  param_key_g: params_ema
+
+
+
+
+val:
+ save_img: true
+ suffix: SwinIR_LLIE
+ metrics:
+   psnr: # metric name
+     type: calculate_psnr
+     crop_border: 0
+     test_y_channel: false
+   ssim:
+     type: calculate_ssim
+     crop_border: 0
+     test_y_channel: false

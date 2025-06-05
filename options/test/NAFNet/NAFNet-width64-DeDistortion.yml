@@ -1,0 +1,46 @@
+name: NAFNet-2248_12_2222_p128b4_DeDistortion
+model_type: SRModel
+scale: 1
+num_gpu: 1
+manual_seed: 12345
+
+gt_size: 128
+
+datasets:
+  test_1:
+    name: Warwick_DeDistortion
+    type: PairedImageDataset
+    color: gray
+    dataroot_gt: D:/Datasets/DegAEFT/HQ/val
+    dataroot_lq: D:/Datasets/DegAEFT/DeDistortion/val
+    io_backend:
+      type: disk
+
+network_g:
+  type: NAFNet
+  width: 64
+  enc_blk_nums: [ 2, 2, 4, 8 ]
+  middle_blk_num: 12
+  dec_blk_nums: [ 2, 2, 2, 2 ]
+  img_channel: 1
+
+
+# path
+path:
+  pretrain_network_g: F:\github\TEMSR\experiments\DegAE_FT\NAFNet-2248_12_2222_p128b4_DeDistortion\models\net_g_200000.pth
+  strict_load_g: true
+  param_key_g: params_ema
+
+
+val:
+ save_img: true
+ suffix: NAFNet_DeDistortion
+ metrics:
+   psnr: # metric name
+     type: calculate_psnr
+     crop_border: 0
+     test_y_channel: false
+   ssim:
+     type: calculate_ssim
+     crop_border: 0
+     test_y_channel: false

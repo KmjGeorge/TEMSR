@@ -1,0 +1,92 @@
+name: InstructIR_d64_2248_4_2222_t256_p128b4
+model_type: InstructIRModel
+scale: 1
+num_gpu: 1
+manual_seed: 12345
+
+gt_size: 128
+
+datasets:
+  test_1:
+    name: InstSIP_Denoise
+    type: InstructIRDataset
+    phase: val
+    color: gray
+    dataset_root: D:/Datasets/DegAEFT
+    meta_info: D:/Datasets/DegAEFT/meta_info_val_denoise.csv
+    lm_path: F:/github/TEMSR/models/bge-micro-v2
+    lm_head_weight_path: F:/github/TEMSR/models/lm_head/model_head_256_dn_db_dd_ll_epoch90.pth
+    text_dim: 256
+    task_num: 4
+    io_backend:
+      type: disk
+  test_2:
+    name: InstSIP_DeBG
+    type: InstructIRDataset
+    phase: val
+    color: gray
+    dataset_root: D:/Datasets/DegAEFT
+    meta_info: D:/Datasets/DegAEFT/meta_info_val_debg.csv
+    lm_path: F:/github/TEMSR/models/bge-micro-v2
+    lm_head_weight_path: F:/github/TEMSR/models/lm_head/model_head_256_dn_db_dd_ll_epoch90.pth
+    text_dim: 256
+    task_num: 4
+    io_backend:
+      type: disk
+  test_3:
+    name: InstSIP_DeDistortion
+    type: InstructIRDataset
+    phase: val
+    color: gray
+    dataset_root: D:/Datasets/DegAEFT
+    meta_info: D:/Datasets/DegAEFT/meta_info_val_dedistortion.csv
+    lm_path: F:/github/TEMSR/models/bge-micro-v2
+    lm_head_weight_path: F:/github/TEMSR/models/lm_head/model_head_256_dn_db_dd_ll_epoch90.pth
+    text_dim: 256
+    task_num: 4
+    io_backend:
+      type: disk
+  test_4:
+    name: InstSIP_LLIE
+    type: InstructIRDataset
+    phase: val
+    color: gray
+    dataset_root: D:/Datasets/DegAEFT
+    meta_info: D:/Datasets/DegAEFT/meta_info_val_llie.csv
+    lm_path: F:/github/TEMSR/models/bge-micro-v2
+    lm_head_weight_path: F:/github/TEMSR/models/lm_head/model_head_256_dn_db_dd_ll_epoch90.pth
+    text_dim: 256
+    task_num: 4
+    io_backend:
+      type: disk
+
+network_g:
+  type: InstructIR
+  img_channel: 1
+  width: 64
+  enc_blk_nums: [2,2,4,8]
+  middle_blk_num: 4
+  dec_blk_nums: [2,2,2,2]
+  txtdim: 256
+
+# path
+path:
+  pretrain_network_g: F:\github\TEMSR\experiments\DegAE_FT\InstructIR_d64_2248_4_2222_t256_p128b4\models\net_g_480000.pth
+  strict_load_g: true
+  param_key_g: params_ema
+
+val:
+ save_img: true
+ suffix: InstructIR
+ metrics:
+   psnr: # metric name
+     type: calculate_psnr
+     crop_border: 0
+     test_y_channel: false
+   ssim:
+     type: calculate_ssim
+     crop_border: 0
+     test_y_channel: false
+
+
+

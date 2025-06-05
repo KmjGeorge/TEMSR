@@ -29,7 +29,11 @@ class SRModel(BaseModel):       # 继承于BaseModel，BaseModel提供所有Mode
         load_path = self.opt['path'].get('pretrain_network_g', None)
         if load_path is not None:
             param_key = self.opt['path'].get('param_key_g', 'params')
+            print('param_key',param_key)
+            # if param_key is not None:
             self.load_network(self.net_g, load_path, self.opt['path'].get('strict_load_g', True), param_key)
+            # else:
+            #     self.load_network(self.net_g, load_path, self.opt['path'].get('strict_load_g', True))
 
         if self.is_train:   # 初始化相关设置
             self.init_training_settings()

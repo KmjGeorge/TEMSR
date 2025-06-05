@@ -22,11 +22,15 @@ class DegAE_InstructIRModel(BaseModel):
         self.net_g = build_network(opt['network_g'])
         self.net_g = self.model_to_device(self.net_g)
         self.print_network(self.net_g)
-        self.freeze_encoder = opt['train'].get('freeze_encoder')
-
-        assert self.opt['path'].get('pretrain_network_encoder')  # pretrained encoder
-        self.load_network(self.net_g.encoder, self.opt['path'].get('pretrain_network_encoder'), True, param_key=None)
-        print('Successfully loaded Pretrined Encoder!!')
+        try:
+            self.freeze_encoder = opt['train'].get('freeze_encoder')
+        except:
+            self.freeze_encoder = None
+        # assert self.opt['path'].get('pretrain_network_encoder')  # pretrained encoder
+        load_encoder_path = self.opt['path'].get('pretrain_network_encoder')
+        if load_encoder_path is not None:
+            self.load_network(self.net_g.encoder, self.opt['path'].get('pretrain_network_encoder'), True, param_key=None)
+            print('Successfully loaded Pretrined Encoder!!')
         # pretrained models
         load_path = self.opt['path'].get('pretrain_network_g', None)
         if load_path is not None:

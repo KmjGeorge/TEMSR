@@ -1,0 +1,52 @@
+name: MPRNet_f80_p128b4_Denoise
+model_type: SRModel
+scale: 1
+num_gpu: 1
+manual_seed: 12345
+
+gt_size: 128
+
+datasets:
+  test_1:
+    name: Warwick_Denoise
+    type: PairedImageDataset
+    color: gray
+    dataroot_gt: D:/Datasets/DegAEFT/HQ/val
+    dataroot_lq: D:/Datasets/DegAEFT/Denoise/val
+    io_backend:
+      type: disk
+
+
+network_g:
+  type: MPRNet
+  in_c: 1
+  out_c: 1
+  n_feat: 80
+  scale_unetfeats: 48
+  scale_orsnetfeats: 32
+  num_cab: 8
+  kernel_size: 3
+  reduction: 4
+  bias: false
+
+# path
+path:
+  pretrain_network_g: F:/github/TEMSR/experiments/DegAE_FT/MPRNet_f64_p128b4_Denoise/models/net_g_200000.pth
+  strict_load_g: true
+  param_key_g: params_ema
+
+
+val:
+ save_img: true
+ suffix: MPRNet_Denoise
+ metrics:
+   psnr: # metric name
+     type: calculate_psnr
+     crop_border: 0
+     test_y_channel: false
+   ssim:
+     type: calculate_ssim
+     crop_border: 0
+     test_y_channel: false
+
+

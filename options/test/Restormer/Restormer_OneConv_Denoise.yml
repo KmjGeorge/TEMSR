@@ -1,0 +1,52 @@
+name: Restormer_noPretrain_p128b4_Denoise_L1
+model_type: SRModel
+scale: 1
+num_gpu: 1
+manual_seed: 12345
+
+gt_size: 128
+
+datasets:
+  test_1:
+    name: Warwick_Denoise
+    type: PairedImageDataset
+    color: gray
+    dataroot_gt: D:/Datasets/DegAEFT/HQ/val
+    dataroot_lq: D:/Datasets/DegAEFT/Denoise/val
+    io_backend:
+      type: disk
+
+
+network_g:
+  type: Restormer_Backbone
+  inp_channels: 1
+  out_channels: 64
+  dim: 48
+  num_blocks: [ 4,6,6,8 ]
+  num_refinement_blocks: 4
+  heads: [ 1,2,4,8 ]
+  ffn_expansion_factor: 2.66
+  bias: False
+  LayerNorm_type: WithBias
+  dual_pixel_task: False
+  global_residual: False
+  output_layer: true
+
+# path
+path:
+  pretrain_network_g: F:\github\TEMSR\experiments\DegAE_FT\Restormer_noPretrain2_1gpu_p128b4_Denoise\models\net_g_80000.pth
+  strict_load_g: true
+  param_key_g: params_ema
+
+val:
+ save_img: true
+ suffix: Restormer_noPretrain
+ metrics:
+   psnr: # metric name
+     type: calculate_psnr
+     crop_border: 0
+     test_y_channel: false
+   ssim:
+     type: calculate_ssim
+     crop_border: 0
+     test_y_channel: false

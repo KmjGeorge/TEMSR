@@ -3,8 +3,8 @@ from copy import deepcopy
 from basicsr.utils.registry import METRIC_REGISTRY
 from .niqe import calculate_niqe
 from .psnr_ssim import calculate_psnr, calculate_ssim
-__all__ = ['calculate_psnr', 'calculate_ssim', 'calculate_niqe']
-
+from .fsds import calculate_fsds
+__all__ = ['calculate_psnr', 'calculate_ssim', 'calculate_niqe', 'calculate_fsds']
 
 def calculate_metric(data, opt):
     """Calculate metric from data and options.
